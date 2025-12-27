@@ -870,6 +870,30 @@ dependencies = [
  "chrono",
  "clap",
  "futures",
+ "memex-core",
+ "memex-plugins",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "memex-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "clap",
+ "futures",
  "mockito",
  "pretty_assertions",
  "regex",
@@ -880,6 +904,29 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "memex-plugins"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "clap",
+ "futures",
+ "memex-core",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
  "toml",
  "tracing",
  "tracing-subscriber",

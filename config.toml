@@ -2,6 +2,10 @@
 fail_mode = "closed"
 decision_timeout_ms = 300000
 abort_grace_ms = 5000
+line_tap_channel_capacity = 1024
+control_channel_capacity = 128
+control_writer_error_capacity = 1
+tick_interval_ms = 1000
 
 [policy]
 mode = "auto"
@@ -25,6 +29,12 @@ timeout_ms = 10000
 search_limit = 6
 min_score = 0.2
 
+[prompt_inject]
+placement = "system" # system|user
+max_items = 3
+max_answer_chars = 900
+include_meta_line = true
+
 [gatekeeper]
 max_inject = 3
 min_trust_show = 0.40
@@ -34,6 +44,16 @@ block_if_consecutive_fail_ge = 3
 skip_if_top1_score_ge = 0.85
 exclude_stale_by_default = true
 active_statuses = ["active", "verified"]
+
+[candidate_extract]
+max_candidates = 1
+max_answer_chars = 1200
+min_answer_chars = 200
+context_lines = 8
+tool_steps_max = 5
+redact = true
+strict_secret_block = true
+confidence = 0.45
 
 [events_out]
 enabled = true

@@ -1,19 +1,14 @@
-﻿[package]
-name = "memex-cli"
-version = "0.1.0"
-edition = "2021"
-authors = ["chaorenex1"]
-license = "Apache-2.0"
-description = "A command-line interface for CodeCLI powered by Memex"
-repository = "https://github.com/chaorenex/memex-cli"
-[lib]
-name = "memex_cli"
-path = "src/lib.rs"
+[workspace]
+members = [
+    "core",
+    "plugins",
+    "cli",
+]
 
-[package.metadata.bundle]
-identifier = "memex-cli"
-
-[dependencies]
+[workspace.dependencies]
+memex-core = { path = "core" }
+memex-plugins = { path = "plugins" }
+memex-cli = { path = "cli" }
 tokio = { version = "^1.37", features = ["process", "io-util", "macros", "signal", "rt-multi-thread", "io-std", "fs"] }
 clap = { version = "^4.5", features = ["derive"] }
 serde = { version = "^1.0", features = ["derive"] }
@@ -31,7 +26,7 @@ futures = "^0.3"
 regex = "^1.10"
 uuid = { version = "1.8", features = ["v4"] }
 
-[dev-dependencies]
+
 tokio-test = "^0.4"
 tempfile = "^3.6"
 mockito = "^1.3"
