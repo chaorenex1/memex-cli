@@ -21,7 +21,7 @@ use memex_plugins::factory;
 pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Option<String>) -> Result<i32, RunnerError> {
     let args = args;
 
-    let mut cfg = load_default().map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    let mut cfg = load_default().map_err(|e| RunnerError::Config(e.to_string()))?;
 
     let mut prompt_text: Option<String> = None;
 
@@ -182,7 +182,7 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
         .map_err(|e| RunnerError::Spawn(e.to_string()))?;
 
     // Run Session (Core Logic)
-    let run_result = run_session(
+    let run_result = match run_session(
         session,
         &cfg.control,
         policy,
@@ -191,7 +191,19 @@ pub async fn run_app(args: Args, run_args: Option<RunArgs>, recover_run_id: Opti
         &run_id,
         stream_plan.silent,
     )
-    .await?;
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            // Best-effort: still emit buffered wrapper events so the run has a trace,
+            // using the configured run_id (no session_id discovered).
+            for mut ev in pending_wrapper_events {
+                ev.run_id = Some(run_id.clone());
+                write_wrapper_event(events_out_tx.as_ref(), &ev).await;
+            }
+            return Err(e);
+        }
+    };
 
     let effective_run_id = run_result.run_id.clone();
 

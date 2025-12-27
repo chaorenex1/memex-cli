@@ -18,6 +18,8 @@ pub enum CliError {
 
 #[derive(Error, Debug)]
 pub enum RunnerError {
+    #[error("config error: {0}")]
+    Config(String),
     #[error("spawn failed: {0}")]
     Spawn(String),
     #[error("stream io error: {stream} {source}")]
