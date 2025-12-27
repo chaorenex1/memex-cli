@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::error::RunnerError;
-use crate::util::ring::RingBytes;
+use crate::util::RingBytes;
 
 #[derive(Debug)]
 pub struct LineTap {

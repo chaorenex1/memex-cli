@@ -1,9 +1,6 @@
 use std::process::Stdio;
-
 use tokio::process::{Child, Command};
-
-use crate::cli::Args;
-use crate::error::RunnerError;
+use crate::{cli::Args, error::RunnerError};
 
 pub fn spawn(args: &Args) -> Result<Child, RunnerError> {
     let mut cmd = Command::new(&args.codecli_bin);

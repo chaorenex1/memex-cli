@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use crate::events_out::EventsOutConfig;
+use crate::gatekeeper::GatekeeperConfig;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub project_id: String,
@@ -13,12 +16,18 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub memory: MemoryConfig,
+
+    #[serde(default)]
+    pub events_out: EventsOutConfig,
+
+    #[serde(default)]
+    pub gatekeeper: GatekeeperConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlConfig {
     #[serde(default = "default_fail_mode")]
-    pub fail_mode: String, // "closed" | "open"
+    pub fail_mode: String,
 
     #[serde(default = "default_decision_timeout_ms")]
     pub decision_timeout_ms: u64,
@@ -27,9 +36,17 @@ pub struct ControlConfig {
     pub abort_grace_ms: u64,
 }
 
-fn default_fail_mode() -> String { "closed".to_string() }
-fn default_decision_timeout_ms() -> u64 { 300_000 }
-fn default_abort_grace_ms() -> u64 { 5_000 }
+fn default_fail_mode() -> String {
+    "closed".to_string()
+}
+
+fn default_decision_timeout_ms() -> u64 {
+    300_000
+}
+
+fn default_abort_grace_ms() -> u64 {
+    5_000
+}
 
 impl Default for ControlConfig {
     fn default() -> Self {
@@ -44,10 +61,10 @@ impl Default for ControlConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PolicyConfig {
     #[serde(default)]
-    pub mode: String, // "off" | "auto" | "prompt"（本轮先实现 auto/off）
+    pub mode: String,
 
     #[serde(default)]
-    pub default_action: String, // "allow" | "deny"
+    pub default_action: String,
 
     #[serde(default)]
     pub allowlist: Vec<PolicyRule>,
@@ -58,9 +75,9 @@ pub struct PolicyConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyRule {
-    pub tool: String,             // 支持前缀或 "*" 通配（简单版）
+    pub tool: String,
     #[serde(default)]
-    pub action: Option<String>,   // read|write|net|exec
+    pub action: Option<String>,
     #[serde(default)]
     pub reason: Option<String>,
 }
@@ -76,34 +93,46 @@ pub struct MemoryConfig {
     #[serde(default = "default_timeout_ms")]
     pub timeout_ms: u64,
 
-    // search defaults
     #[serde(default = "default_search_limit")]
     pub search_limit: u32,
     #[serde(default = "default_min_score")]
     pub min_score: f32,
 }
 
-fn default_timeout_ms() -> u64 { 10_000 }
-fn default_search_limit() -> u32 { 6 }
-fn default_min_score() -> f32 { 0.2 }
+fn default_timeout_ms() -> u64 {
+    10_000
+}
+
+fn default_search_limit() -> u32 {
+    6
+}
+
+fn default_min_score() -> f32 {
+    0.2
+}
 
 pub fn load_default() -> anyhow::Result<AppConfig> {
-    let mut cfg = if Path::new(".config.toml").exists() {
+    let mut cfg: AppConfig = if Path::new(".config.toml").exists() {
         let s = std::fs::read_to_string(".config.toml")?;
         toml::from_str::<AppConfig>(&s)?
     } else {
         AppConfig::default()
     };
 
-    // env overrides (minimal)
     if let Ok(v) = std::env::var("MEM_CODECLI_PROJECT_ID") {
-        if !v.trim().is_empty() { cfg.project_id = v; }
+        if !v.trim().is_empty() {
+            cfg.project_id = v;
+        }
     }
     if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_URL") {
-        if !v.trim().is_empty() { cfg.memory.base_url = v; }
+        if !v.trim().is_empty() {
+            cfg.memory.base_url = v;
+        }
     }
     if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_API_KEY") {
-        if !v.trim().is_empty() { cfg.memory.api_key = v; }
+        if !v.trim().is_empty() {
+            cfg.memory.api_key = v;
+        }
     }
 
     Ok(cfg)

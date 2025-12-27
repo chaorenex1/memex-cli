@@ -1,9 +1,12 @@
-use thiserror::Error;
+﻿use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CliError {
     #[error("runner error")]
     Runner(#[from] RunnerError),
+
+    #[error("replay error: {0}")]
+    Replay(String),
 }
 
 #[derive(Error, Debug)]

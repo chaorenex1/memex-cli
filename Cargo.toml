@@ -8,7 +8,7 @@ description = "A command-line interface for CodeCLI powered by Memex"
 repository = "https://github.com/chaorenex/memex_cli"
 
 [dependencies]
-tokio = { version = "^1.37", features = ["process", "io-util", "macros", "signal", "rt-multi-thread", "io-std"] }
+tokio = { version = "^1.37", features = ["process", "io-util", "macros", "signal", "rt-multi-thread", "io-std", "fs"] }
 clap = { version = "^4.5", features = ["derive"] }
 serde = { version = "^1.0", features = ["derive"] }
 serde_json = "^1.0"
@@ -18,12 +18,12 @@ tracing-subscriber = { version = "^0.3", features = ["env-filter", "fmt"] }
 anyhow = "^1.0"
 async-trait = "^0.1"
 bytes = "^1.5"
-reqwest = { version = "^0.11", features = ["json","rustls-tls"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 chrono = { version = "^0.4", features = ["serde"] }
 toml = "0.8"
 futures = "^0.3"
 regex = "^1.10"
-uuid = { version = "^1.6", features = ["v4"] }
+uuid = { version = "1.8", features = ["v4"] }
 
 [dev-dependencies]
 tokio-test = "^0.4"
