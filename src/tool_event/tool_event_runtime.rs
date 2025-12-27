@@ -21,7 +21,9 @@ impl<P: ToolEventParser> ToolEventRuntime<P> {
             self.events.push(ev.clone());
 
             if let Some(out) = &self.events_out {
-                let s = self.parser.format_line(&ev);
+                // For clean JSONL output, we might want to skip the prefix.
+                // For now, let's just send the raw JSON of the event.
+                let s = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
                 out.send_line(s).await;
             }
         }

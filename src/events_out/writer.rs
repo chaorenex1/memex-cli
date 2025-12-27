@@ -13,8 +13,8 @@ pub struct EventsOutConfig {
 impl Default for EventsOutConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
-            path: String::new(),
+            enabled: true,
+            path: "./run.events.jsonl".to_string(),
             channel_capacity: 2048,
             drop_when_full: true,
         }
@@ -60,27 +60,31 @@ pub async fn start_events_out(cfg: &EventsOutConfig) -> Result<Option<EventsOutT
     let drop_when_full = cfg.drop_when_full;
 
     tokio::spawn(async move {
-        let file = match tokio::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .await
-        {
-            Ok(f) => f,
-            Err(_) => return,
+        let mut writer: Box<dyn tokio::io::AsyncWrite + Unpin + Send> = if path == "stdout:" {
+            Box::new(tokio::io::stdout())
+        } else {
+            let file = match tokio::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .await
+            {
+                Ok(f) => f,
+                Err(_) => return,
+            };
+            Box::new(file)
         };
 
-        let mut w = BufWriter::new(file);
         while let Some(mut line) = rx.recv().await {
             if !line.ends_with('\n') {
                 line.push('\n');
             }
-            if w.write_all(line.as_bytes()).await.is_err() {
+            if writer.write_all(line.as_bytes()).await.is_err() {
                 return;
             }
         }
 
-        let _ = w.flush().await;
+        let _ = writer.flush().await;
         let _ = dropped_clone.load(std::sync::atomic::Ordering::Relaxed);
     });
 

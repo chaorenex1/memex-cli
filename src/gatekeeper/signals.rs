@@ -1,4 +1,9 @@
 ﻿use regex::Regex;
+use serde_json::Value;
+
+use crate::gatekeeper::SearchMatch;
+use crate::runner::RunOutcome;
+use crate::tool_event::CorrelationStats;
 
 #[derive(Debug, Clone)]
 pub struct ValidationSignal {
@@ -85,4 +90,44 @@ pub fn grade_validation_signal(
     };
 
     ValidationSignal { result, signal_strength, strong_signal, reason }
+}
+
+pub fn build_signals(matches: &[SearchMatch], run: &RunOutcome, tool_corr: &CorrelationStats) -> Value {
+    let mut by_type: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut tools: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut failing: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+    for e in &run.tool_events {
+        *by_type.entry(e.event_type.clone()).or_insert(0) += 1;
+        if let Some(t) = &e.tool {
+            tools.insert(t.clone());
+        }
+        if e.event_type == "tool.result" && e.ok == Some(false) {
+            if let Some(t) = &e.tool {
+                failing.insert(t.clone());
+            }
+        }
+    }
+
+    serde_json::json!({
+        "matches_total": matches.len(),
+        "tool_events_total": run.tool_events.len(),
+        "tool_events_by_type": by_type,
+        "tools": tools.into_iter().collect::<Vec<_>>(),
+        "failing_tools": failing.into_iter().collect::<Vec<_>>(),
+        "tool_corr": {
+            "request_count": tool_corr.request_count,
+            "result_count": tool_corr.result_count,
+            "matched_pairs": tool_corr.matched_pairs,
+            "unmatched_requests": tool_corr.unmatched_requests,
+            "unmatched_results": tool_corr.unmatched_results,
+            "request_missing_id": tool_corr.request_missing_id,
+            "result_missing_id": tool_corr.result_missing_id,
+            "duplicate_request_ids": tool_corr.duplicate_request_ids,
+            "duplicate_result_ids": tool_corr.duplicate_result_ids,
+            "failed_results": tool_corr.failed_results,
+            "by_tool": tool_corr.by_tool,
+            "last_pair": tool_corr.last_pair,
+        },
+    })
 }

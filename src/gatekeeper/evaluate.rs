@@ -4,11 +4,11 @@ use std::collections::HashSet;
 
 use super::gatekeeper_reasons::summarize_tool_corr_anomalies;
 use crate::runner::RunOutcome;
-use crate::tool_event::build_tool_insights;
+use crate::tool_event::{build_tool_insights, ToolEvent};
 
 use super::config::GatekeeperConfig;
 use super::decision::{GatekeeperDecision, HitRef, InjectItem, SearchMatch, ValidatePlan};
-use super::signals::{grade_validation_signal, SignalHeuristics};
+use super::signals::{build_signals, grade_validation_signal, SignalHeuristics};
 
 pub struct Gatekeeper;
 
@@ -18,6 +18,7 @@ impl Gatekeeper {
         now: DateTime<Utc>,
         matches: &[SearchMatch],
         run: &RunOutcome,
+        tool_events: &[ToolEvent],
     ) -> GatekeeperDecision {
         let mut reasons: Vec<String> = Vec::new();
 
@@ -151,7 +152,7 @@ impl Gatekeeper {
             });
         }
 
-        let insights = build_tool_insights(&run.tool_events);
+        let insights = build_tool_insights(tool_events);
         let corr = &insights.correlation;
 
         let heur = SignalHeuristics::default();
@@ -216,34 +217,24 @@ impl Gatekeeper {
 
         reasons.extend(summarize_tool_corr_anomalies(corr));
 
-        let signals = serde_json::json!({
-            "usable_count": usable.len(),
-            "inject_count": inject_list.len(),
-            "has_strong": has_strong,
-            "top1_score": top1_score,
-            "status_reject": status_reject,
-            "stale_reject": stale_count,
-            "fail_reject": fail_reject,
-            "should_write_candidate": should_write_candidate,
-            "tool_events_total": insights.total,
-            "tool_events_by_type": insights.by_type,
-            "tools": insights.tools,
-            "failing_tools": insights.failing_tools,
-            "tool_corr": {
-                "request_count": corr.request_count,
-                "result_count": corr.result_count,
-                "matched_pairs": corr.matched_pairs,
-                "unmatched_requests": corr.unmatched_requests,
-                "unmatched_results": corr.unmatched_results,
-                "request_missing_id": corr.request_missing_id,
-                "result_missing_id": corr.result_missing_id,
-                "duplicate_request_ids": corr.duplicate_request_ids,
-                "duplicate_result_ids": corr.duplicate_result_ids,
-                "failed_results": corr.failed_results,
-                "by_tool": corr.by_tool,
-                "last_pair": corr.last_pair,
-            },
-        });
+        let mut signals = build_signals(matches, run, corr);
+        if let Some(map) = signals.as_object_mut() {
+            map.insert("usable_count".into(), serde_json::json!(usable.len()));
+            map.insert("inject_count".into(), serde_json::json!(inject_list.len()));
+            map.insert("has_strong".into(), serde_json::json!(has_strong));
+            map.insert("top1_score".into(), serde_json::json!(top1_score));
+            map.insert("status_reject".into(), serde_json::json!(status_reject));
+            map.insert("stale_reject".into(), serde_json::json!(stale_count));
+            map.insert("fail_reject".into(), serde_json::json!(fail_reject));
+            map.insert(
+                "should_write_candidate".into(),
+                serde_json::json!(should_write_candidate),
+            );
+            map.insert("tool_events_total".into(), serde_json::json!(insights.total));
+            map.insert("tool_events_by_type".into(), serde_json::json!(insights.by_type));
+            map.insert("tools".into(), serde_json::json!(insights.tools));
+            map.insert("failing_tools".into(), serde_json::json!(insights.failing_tools));
+        }
 
         GatekeeperDecision {
             inject_list,

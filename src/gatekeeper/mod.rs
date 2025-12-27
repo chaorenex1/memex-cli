@@ -7,7 +7,7 @@ pub mod signals;
 pub use config::GatekeeperConfig;
 pub use decision::{GatekeeperDecision, HitRef, InjectItem, SearchMatch, ValidatePlan};
 pub use evaluate::Gatekeeper;
-pub use signals::{grade_validation_signal, SignalHeuristics, ValidationSignal};
+pub use signals::{build_signals, grade_validation_signal, SignalHeuristics, ValidationSignal};
 
 use regex::Regex;
 use std::collections::BTreeSet;

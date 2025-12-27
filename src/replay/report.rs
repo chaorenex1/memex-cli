@@ -29,6 +29,7 @@ pub fn build_report(runs: &[ReplayRun]) -> Value {
             "has_exit": r.runner_exit.is_some(),
             "has_drop": r.tee_drop.is_some(),
             "has_search": r.search_result.is_some(),
+            "derived": r.derived,
         }));
     }
 
@@ -48,34 +49,75 @@ pub fn format_text(report: &Value) -> String {
     let mut out = String::new();
     let totals = report.get("totals");
 
-    out.push_str("Replay report\n");
+    out.push_str("Replay report
+");
     if let Some(t) = totals {
-        out.push_str(&format!("runs: {}\n", t.get("runs").unwrap_or(&Value::Null)));
+        out.push_str(&format!("runs: {}
+", t.get("runs").unwrap_or(&Value::Null)));
         out.push_str(&format!(
-            "tool_events: {}\n",
+            "tool_events: {}
+",
             t.get("tool_events").unwrap_or(&Value::Null)
         ));
         out.push_str(&format!(
-            "runs_with_exit: {}\n",
+            "runs_with_exit: {}
+",
             t.get("runs_with_exit").unwrap_or(&Value::Null)
         ));
         out.push_str(&format!(
-            "runs_with_drop: {}\n",
+            "runs_with_drop: {}
+",
             t.get("runs_with_drop").unwrap_or(&Value::Null)
         ));
         out.push_str(&format!(
-            "runs_with_search: {}\n",
+            "runs_with_search: {}
+",
             t.get("runs_with_search").unwrap_or(&Value::Null)
         ));
     }
 
     if let Some(runs) = report.get("runs").and_then(|v| v.as_array()) {
         for r in runs {
-            out.push_str(&format!("- run_id: {}\n", r.get("run_id").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  tool_events: {}\n", r.get("tool_events").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  has_exit: {}\n", r.get("has_exit").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  has_drop: {}\n", r.get("has_drop").unwrap_or(&Value::Null)));
-            out.push_str(&format!("  has_search: {}\n", r.get("has_search").unwrap_or(&Value::Null)));
+            out.push_str(&format!("- run_id: {}
+", r.get("run_id").unwrap_or(&Value::Null)));
+            out.push_str(&format!("  tool_events: {}
+", r.get("tool_events").unwrap_or(&Value::Null)));
+            out.push_str(&format!("  has_exit: {}
+", r.get("has_exit").unwrap_or(&Value::Null)));
+            out.push_str(&format!("  has_drop: {}
+", r.get("has_drop").unwrap_or(&Value::Null)));
+            out.push_str(&format!("  has_search: {}
+", r.get("has_search").unwrap_or(&Value::Null)));
+
+            if let Some(derived) = r.get("derived") {
+                if let Some(rerun) = derived.get("rerun_gatekeeper") {
+                    let skipped = rerun.get("skipped").unwrap_or(&Value::Null);
+                    let changed = rerun
+                        .get("diff")
+                        .and_then(|d| d.get("changed"))
+                        .unwrap_or(&Value::Null);
+                    let reason = rerun.get("skip_reason").unwrap_or(&Value::Null);
+                    out.push_str(&format!("  rerun_gatekeeper: skipped={} changed={} reason={}
+", skipped, changed, reason));
+
+                    if let Some(lines) = rerun
+                        .get("diff")
+                        .and_then(|d| d.get("summary_lines"))
+                        .and_then(|v| v.as_array())
+                    {
+                        let mut items = Vec::new();
+                        for it in lines {
+                            if let Some(s) = it.as_str() {
+                                items.push(s.to_string());
+                            }
+                        }
+                        if !items.is_empty() {
+                            out.push_str(&format!("  rerun_diff: {}
+", items.join(" | ")));
+                        }
+                    }
+                }
+            }
         }
     }
 

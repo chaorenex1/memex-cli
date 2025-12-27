@@ -1,5 +1,3 @@
-project_id = "my-project"
-
 [control]
 fail_mode = "closed"
 decision_timeout_ms = 300000

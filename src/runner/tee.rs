@@ -17,22 +17,24 @@ pub fn pump_stdout<R>(
     rd: R,
     ring: Arc<RingBytes>,
     line_tx: mpsc::Sender<LineTap>,
+    silent: bool,
 ) -> JoinHandle<Result<u64, RunnerError>>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
-    pump(rd, tokio::io::stdout(), ring, "stdout", line_tx)
+    pump(rd, tokio::io::stdout(), ring, "stdout", line_tx, silent)
 }
 
 pub fn pump_stderr<R>(
     rd: R,
     ring: Arc<RingBytes>,
     line_tx: mpsc::Sender<LineTap>,
+    silent: bool,
 ) -> JoinHandle<Result<u64, RunnerError>>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
-    pump(rd, tokio::io::stderr(), ring, "stderr", line_tx)
+    pump(rd, tokio::io::stderr(), ring, "stderr", line_tx, silent)
 }
 
 fn pump<R, W>(
@@ -41,6 +43,7 @@ fn pump<R, W>(
     ring: Arc<RingBytes>,
     label: &'static str,
     line_tx: mpsc::Sender<LineTap>,
+    silent: bool,
 ) -> JoinHandle<Result<u64, RunnerError>>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
@@ -62,9 +65,11 @@ where
 
             ring.push(&buf[..n]);
 
-            wr.write_all(&buf[..n])
-                .await
-                .map_err(|e| RunnerError::StreamIo { stream: label, source: e })?;
+            if !silent {
+                wr.write_all(&buf[..n])
+                    .await
+                    .map_err(|e| RunnerError::StreamIo { stream: label, source: e })?;
+            }
             total += n as u64;
 
             line_buf.extend_from_slice(&buf[..n]);
