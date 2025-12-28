@@ -76,91 +76,170 @@ let stream = factory::build_stream(stream_format);
 ### 5.1 整体布局
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ Memex CLI - Run ID: abc123-456... │ Status: Running │ Token: 12345 │
+╭─────────────────────────────────────────────────────────────────────╮
+│ ◉ Memex CLI          Run: abc123-456    ⚡ Running    🔧 4  💬 12345 │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                       │
-│ ┌──────────────────────── Tool Events ─────────────────────────┐    │
-│ │ [1] 12:34:56 tool_call edit_file                             │    │
-│ │     args: {"file": "main.rs", "line": 10}                    │    │
-│ │ [2] 12:34:57 tool_result success                             │    │
-│ │     output: "File edited successfully"                       │    │
-│ │ [3] 12:34:58 tool_call run_command                           │    │
-│ │     args: {"cmd": "cargo test"}                              │    │
-│ │ [4] 12:35:02 tool_result success                             │    │
-│ │     output: "All tests passed"                               │    │
-│ └──────────────────────────────────────────────────────────────┘    │
+│  Tool Events                                                     [1] │
+│  ─────────────────────────────────────────────────────────────────  │
 │                                                                       │
-│ ┌───────────────────── Assistant Output ───────────────────────┐    │
-│ │ I'll help you with that task...                              │    │
-│ │                                                               │    │
-│ │ First, I'll edit the main file...                            │    │
-│ │ [Tool call: edit_file]                                       │    │
-│ │                                                               │    │
-│ │ Now running tests...                                         │    │
-│ │ [Tool call: run_command]                                     │    │
-│ │                                                               │    │
-│ │ All tests passed successfully!                               │    │
-│ └──────────────────────────────────────────────────────────────┘    │
+│  🔧 12:34:56  edit_file                                              │
+│  │ file: "main.rs", line: 10                                        │
+│  ✅ 12:34:57  success → File edited successfully                    │
 │                                                                       │
-│ ┌────────────────────── Raw Output ────────────────────────────┐    │
-│ │ stdout: Running test suite...                                │    │
-│ │ stdout: test_basic ... ok                                    │    │
-│ │ stdout: test_advanced ... ok                                 │    │
-│ └──────────────────────────────────────────────────────────────┘    │
+│  🔧 12:34:58  run_command                                            │
+│  │ cmd: "cargo test"                                                │
+│  ✅ 12:35:02  success → All tests passed                            │
+│                                                                       │
+│  ─────────────────────────────────────────────────────────────────  │
+│                                                                       │
+│  Assistant Output                                                [2] │
+│  ─────────────────────────────────────────────────────────────────  │
+│                                                                       │
+│  I'll help you with that task...                                    │
+│                                                                       │
+│  First, I'll edit the main file...                                  │
+│  → [Tool: edit_file]                                                │
+│                                                                       │
+│  Now running tests...                                               │
+│  → [Tool: run_command]                                              │
+│                                                                       │
+│  ✓ All tests passed successfully!                                   │
+│                                                                       │
+│  ─────────────────────────────────────────────────────────────────  │
+│                                                                       │
+│  Raw Output                                                      [3] │
+│  ─────────────────────────────────────────────────────────────────  │
+│                                                                       │
+│  Running test suite...                                              │
+│  test_basic ... ok                                                  │
+│  test_advanced ... ok                                               │
 │                                                                       │
 ├─────────────────────────────────────────────────────────────────────┤
-│ [q] Quit  [↑↓] Scroll  [Tab] Switch Panel  [p] Pause  [c] Copy     │
-└─────────────────────────────────────────────────────────────────────┤
+│ > _                                                                   │
+│ Normal Mode  ⌨ Press : for commands, / for search, Tab to switch    │
+╰─────────────────────────────────────────────────────────────────────╯
 ```
 
 ### 5.2 布局分区
 
 #### 顶部状态栏（Header）
-- **Run ID**：当前运行 ID
-- **Status**：运行状态（Running / Paused / Completed / Error）
-- **Metrics**：实时统计（Token 数、工具调用次数、运行时长）
+- **应用标识**：`◉ Memex CLI` - 带图标的品牌标识
+- **Run ID**：显示当前运行的简短 ID
+- **状态指示器**：
+  - `⚡ Running` - 运行中
+  - `⏸ Paused` - 已暂停
+  - `✓ Completed` - 已完成
+  - `✗ Error` - 出错
+- **实时指标**：
+  - `🔧 N` - 工具调用次数
+  - `💬 N` - Token 计数
+  - `⏱ MM:SS` - 运行时长（可选）
 
-#### 主内容区域（3 个可切换面板）
-1. **Tool Events 面板**
-   - 显示所有工具调用和结果
-   - 支持折叠/展开详细参数
-   - 高亮显示错误/警告
-   - 自动滚动到最新事件
+#### 主内容区域（3 个面板，分屏显示）
+所有面板同时可见，采用现代化无边框设计，通过分隔线区分。
 
-2. **Assistant Output 面板**
-   - 显示 AI 助手的流式输出
-   - 语法高亮（Markdown 支持）
-   - 支持代码块渲染
+1. **Tool Events 面板** `[1]`
+   - 使用图标标识：`🔧` 工具调用，`✅` 成功，`❌` 失败
+   - 简洁的树状展示结构
+   - 参数缩进显示，避免过度嵌套
+   - 支持展开/折叠（按空格键）
+   - 高亮最新事件
 
-3. **Raw Output 面板**
-   - 原始 stdout/stderr 输出
-   - 分色显示（stdout 白色，stderr 红色）
-   - 支持正则搜索/过滤
+2. **Assistant Output 面板** `[2]`
+   - 流式显示 AI 助手输出
+   - 使用 `→` 箭头标识工具调用
+   - 使用 `✓` 标识完成状态
+   - 支持 Markdown 语法（粗体、代码块等）
+   - 自动换行和智能缩进
 
-#### 底部快捷键栏（Footer）
-- 常用快捷键提示
-- 可配置隐藏
+3. **Raw Output 面板** `[3]`
+   - 原始 stdout/stderr 混合显示
+   - stdout 使用默认颜色
+   - stderr 使用红色/橙色高亮
+   - 可通过输入框过滤内容
+
+#### 底部输入区域（Input Bar）
+现代化的多功能输入框，替代传统快捷键栏：
+
+- **主输入框**：`> _` - 光标闪烁
+- **模式指示器**：显示当前输入模式
+  - `Normal Mode` - 普通模式（接收单键命令）
+  - `Command Mode` - 命令模式（输入 `:` 进入）
+  - `Search Mode` - 搜索模式（输入 `/` 进入）
+  - `Filter Mode` - 过滤模式（输入 `?` 进入）
+- **提示文本**：简短的操作提示，右对齐显示
 
 ### 5.3 交互设计
 
-#### 键盘快捷键
-- `q` / `Ctrl+C`：退出
-- `↑` / `↓`：滚动当前面板
-- `PgUp` / `PgDn`：翻页
-- `Home` / `End`：跳到开始/结束
-- `Tab` / `Shift+Tab`：切换面板
+#### 输入模式系统
+受 Vim 启发的现代化输入模式设计：
+
+##### 1. Normal Mode（普通模式）- 默认模式
+单键快捷操作：
+- `q` / `Ctrl+C`：退出应用
+- `j` / `↓`：向下滚动当前面板
+- `k` / `↑`：向上滚动当前面板
+- `h` / `←`：滚动到行首
+- `l` / `→`：滚动到行尾
+- `Ctrl+D`：向下翻页
+- `Ctrl+U`：向上翻页
+- `g g`：跳到开始（连按两次 g）
+- `G`：跳到末尾
+- `Tab`：切换到下一面板
+- `1` / `2` / `3`：直接切换到面板 1/2/3
 - `p`：暂停/恢复输出流
+- `Space`：展开/折叠当前 Tool Event
+- `y`：复制当前行到剪贴板
+- `Y`：复制整个面板内容
+
+进入其他模式：
+- `:`：进入命令模式
 - `/`：进入搜索模式
-- `c`：复制选中内容到剪贴板
-- `f`：进入过滤模式
-- `Space`：展开/折叠 Tool Event 详情
-- `r`：刷新/重绘界面
+- `?`：进入过滤模式
+- `i`：进入输入模式（用于发送消息，未来扩展）
+
+##### 2. Command Mode（命令模式）
+输入 `:` 后进入，可执行命令：
+- `:q` 或 `:quit` - 退出
+- `:w <file>` 或 `:write <file>` - 保存当前面板到文件
+- `:export <file>` - 导出所有数据到文件
+- `:clear` - 清空当前面板内容
+- `:pause` - 暂停输出
+- `:resume` - 恢复输出
+- `:theme <name>` - 切换主题
+- `:help` - 显示帮助信息
+- `:panel <1|2|3>` - 切换面板
+- `Esc` - 返回 Normal Mode
+
+##### 3. Search Mode（搜索模式）
+输入 `/` 后进入，可搜索内容：
+- 输入搜索词，实时高亮匹配项
+- `Enter` - 跳到下一个匹配
+- `Shift+Enter` - 跳到上一个匹配
+- `n` - 下一个匹配（搜索后在 Normal Mode 使用）
+- `N` - 上一个匹配
+- `Esc` - 返回 Normal Mode
+
+##### 4. Filter Mode（过滤模式）
+输入 `?` 后进入，可过滤显示内容：
+- 输入正则表达式或关键词
+- 实时过滤当前面板内容
+- `Enter` - 应用过滤
+- `Esc` - 清除过滤，返回 Normal Mode
+
+#### 可视化反馈
+- **光标**：输入框中显示闪烁光标
+- **高亮**：当前活动面板使用不同颜色边框
+- **动画**：新内容到达时短暂闪烁
+- **进度**：长时间操作显示 spinner 动画
+- **通知**：操作完成后在输入框上方显示提示（2秒后消失）
 
 #### 鼠标支持（可选）
-- 滚轮滚动
-- 点击切换面板
-- 拖拽调整分区大小
+- 滚轮滚动当前鼠标所在面板
+- 点击面板切换激活状态
+- 点击输入框进入输入模式
+- 拖拽面板边界调整大小（高级特性）
 
 ## 六、数据流设计
 
@@ -280,6 +359,14 @@ pub struct TuiApp {
     scroll_offset: usize,
     paused: bool,
     filter: Option<Regex>,
+    expanded_events: HashSet<usize>, // 展开的事件索引
+    
+    // 输入状态
+    input_mode: InputMode,
+    input_buffer: String,
+    cursor_pos: usize,
+    command_history: Vec<String>,
+    history_index: usize,
     
     // 运行状态
     status: RunStatus,
@@ -289,9 +376,32 @@ pub struct TuiApp {
     tool_call_count: usize,
     
     // 搜索状态
-    search_mode: bool,
     search_query: String,
     search_results: Vec<SearchResult>,
+    current_search_index: usize,
+    
+    // 通知状态
+    notification: Option<Notification>,
+}
+
+pub enum InputMode {
+    Normal,    // 普通模式（单键命令）
+    Command,   // 命令模式（输入 : 进入）
+    Search,    // 搜索模式（输入 / 进入）
+    Filter,    // 过滤模式（输入 ? 进入）
+}
+
+pub struct Notification {
+    message: String,
+    level: NotificationLevel,
+    expires_at: Instant,
+}
+
+pub enum NotificationLevel {
+    Info,
+    Success,
+    Warning,
+    Error,
 }
 
 pub enum PanelKind {
@@ -316,15 +426,131 @@ impl TuiApp {
     fn handle_tui_event(&mut self, event: TuiEvent) {
         match event {
             TuiEvent::ToolEvent(evt) => {
-                self.tool_events.push(evt);
-                self.tool_call_count += 1;
-                if !self.paused {
-                    self.auto_scroll();
+              self.input_mode {
+            InputMode::Normal => self.handle_normal_mode(key),
+            InputMode::Command => self.handle_command_mode(key),
+            InputMode::Search => self.handle_search_mode(key),
+            InputMode::Filter => self.handle_filter_mode(key),
+        }
+    }
+    
+    fn handle_normal_mode(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Char('Q') => return true, // 退出
+            KeyCode::Char('j') | KeyCode::Down => self.scroll_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.scroll_up(),
+            KeyCode::Char('h') | KeyCode::Left => self.scroll_to_start(),
+            KeyCode::Char('l') | KeyCode::Right => self.scroll_to_end(),
+            KeyCode::Char('g') => {
+                if self.last_key == Some('g') {
+                    self.scroll_to_top();
+                }
+                self.last_key = Some('g');
+            }
+            KeyCode::Char('G') => self.scroll_to_bottom(),
+            KeyCode::Tab => self.next_panel(),
+            KeyCode::BackTab => self.prev_panel(),
+            KeyCode::Char('1') => self.switch_to_panel(PanelKind::ToolEvents),
+            KeyCode::Char('2') => self.switch_to_panel(PanelKind::AssistantOutput),
+            KeyCode::Char('3') => self.switch_to_panel(PanelKind::RawOutput),
+            KeyCode::Char('p') => self.toggle_pause(),
+            KeyCode::Char(' ') => self.toggle_expand_current(),
+            KeyCode::Char('y') => self.copy_current_line(),
+            KeyCode::Char('Y') => self.copy_panel_content(),
+            KeyCode::Char(':') => self.enter_command_mode(),
+            KeyCode::Char('/') => self.enter_search_mode(),
+            KeyCode::Char('?') => self.enter_filter_mode(),
+            KeyCode::Char('n') => self.search_next(),
+            KeyCode::Char('N') => self.search_prev(),
+            KeyCode::Ctrl('d') => self.page_down(),
+            KeyCode::Ctrl('u') => self.page_up(),
+            _ => {
+                self.last_key = None;
+            }
+        }
+        false
+    }
+    
+    fn handle_command_mode(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Esc => {
+                self.exit_input_mode();
+            }
+            KeyCode::Enter => {
+                let should_quit = self.execute_command();
+                self.exit_input_mode();
+                return should_quit;
+            }
+            KeyCode::Backspace => {
+                if self.cursor_pos > 0 {
+                    self.input_buffer.remove(self.cursor_pos - 1);
+                    self.cursor_pos -= 1;
                 }
             }
-            TuiEvent::AssistantOutput(text) => {
-                self.assistant_buffer.push_str(&text);
-                if !self.paused {
+            KeyCode::Delete => {
+                if self.cursor_pos < self.input_buffer.len() {
+                    self.input_buffer.remove(self.cursor_pos);
+                }
+            }
+            KeyCode::Left => {
+                if self.cursor_pos > 0 {
+                    self.cursor_pos -= 1;
+                }
+            }
+            KeyCode::Right => {
+                if self.cursor_pos < self.input_buffer.len() {
+                    self.cursor_pos += 1;
+                }
+            }
+            KeyCode::Home => {
+                self.cursor_pos = 0;
+            }
+            KeyCode::End => {
+                self.cursor_pos = self.input_buffer.len();
+            }
+            KeyCode::Up => {
+                self.history_prev();
+            }
+            KeyCode::Down => {
+                self.history_next();
+            }
+            KeyCode::Char(c) => {
+                self.input_buffer.insert(self.cursor_pos, c);
+                self.cursor_pos += 1;
+            }
+            _ => {}
+        }
+        false
+    }
+    
+    fn handle_search_mode(&mut self, key: KeyEvent) -> bool {
+        // 类似 command_mode，但 Enter 时执行搜索
+        match key.code {
+            KeyCode::Esc => {
+                self.exit_input_mode();
+            }
+            KeyCode::Enter => {
+                self.perform_search();
+                self.exit_input_mode();
+            }
+            // ... 其他按键处理同 command_mode
+            _ => {}
+        }
+        false
+    }
+    
+    fn handle_filter_mode(&mut self, key: KeyEvent) -> bool {
+        // 类似 search_mode，但应用过滤
+        match key.code {
+            KeyCode::Esc => {
+                self.clear_filter();
+                self.exit_input_mode();
+            }
+            KeyCode::Enter => {
+                self.apply_filter();
+                self.exit_input_mode();
+            }
+            // ... 其他按键处理 !self.paused {
                     self.auto_scroll();
                 }
             }
@@ -372,15 +598,184 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut TuiApp) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(0),     // Main content
-            Constraint::Length(1),  // Footer
+            Constraint::Length(2),  // Header (compact)
+            Constraint::Min(0),     // Main content (flexible)
+            Constraint::Length(2),  // Input bar
         ])
         .split(f.size());
     
     draw_header(f, chunks[0], app);
     draw_main_content(f, chunks[1], app);
-    draw_footer(f, chunks[2], app);
+    draw_input_bar(f, chunks[2], app);
+}
+
+// 绘制输入区域
+fn draw_input现代化 Tool Events 面板
+
+```rust
+fn draw_tool_events<B: Backend>(f: &mut Frame<B>, area: Rect, app: &TuiApp) {
+    let is_active = app.active_panel == PanelKind::ToolEvents;
+    
+    // 无边框设计，使用简单分隔线
+    let title = Span::styled(
+        "  Tool Events",
+        Style::default()
+            .fg(if is_active { Color::Cyan } else { Color::Gray })
+            .add_modifier(Modifier::BOLD),
+    );
+    
+    let panel_indicator = Span::styled(
+        "[1]",
+        Style::default().fg(Color::DarkGray),
+    );
+    
+    // 构建标题行
+    let title_line = Line::from(vec![title, Span::raw(" "), panel_indicator]);
+    
+    // 构建内容
+    let mut lines = vec![title_line];
+    lines.push(Line::from("  ─────────────────────────────────────────────────"));
+    lines.push(Line::from("")); // 空行
+    
+    for (i, evt) in app.tool_events.iter().enumerate() {
+        if app.filter.as_ref().map_or(false, |f| !f.is_match(&evt.name)) {
+            continue; // 过滤不匹配的事件
+        }
+        
+        let icon = match evt.event_type.as_str() {
+            "tool_call" => "🔧",
+            "tool_result" if evt.status == Some("success") => "✅",
+            "tool_result" if evt.status == Some("error") => "❌",
+            _ => "•",
+        };
+        
+        let timestamp = format_timestamp(&evt.timestamp);
+        let name = evt.name.clone().unwrap_or_default();
+        
+        // 主行
+        let main_line = Line::from(vec![
+            Span::raw("  "),
+            Span::styled(icon, Style::default().fg(Color::Yellow)),
+            Span::raw(" "),
+            Span::styled(timestamp, Style::default().fg(Color::DarkGray)),
+            Span::raw("  "),
+            Span::styled(name, Style::default().fg(Color::Cyan)),
+        ]);
+        
+        lines.push(main_line);
+        
+        // 展开的详情（如果需要）
+        if app.expanded_events.contains(&i) {
+            if let Some(args) = &evt.args {
+                let args_preview = format_args_preview(args, 60);
+                let detail_line = Line::from(vec![
+                    Span::raw("  │ "),
+                    Span::styled(args_preview, Style::default().fg(Color::Gray)),
+                ]);
+                lines.push(detail_line);
+            }
+            
+            if let Some(output) = &evt.output {
+                let output_preview = shorten_text(output, 60);
+                let result_line = Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled("→ ", Style::default().fg(Color::Green)),
+                    Span::styled(output_preview, Style::default().fg(Color::White)),
+                ]);
+                lines.push(result_line);
+            }
+        }
+        
+        lines.push(Line::from("")); // 事件间空行
+    }
+    
+    // 应用滚动偏移
+    let visible_lines = if app.active_panel == PanelKind::ToolEvents {
+        lines.into_iter()
+            .skip(app.scroll_offset)
+            .collect()
+    } else {
+        lines
+    };
+    
+    let paragraph = Paragraph::new(visible_lines)
+        .wrap(Wrap { trim: false })
+        .scroll((0, 0));
+    
+    // 高亮当前激活的面板
+    let block = if is_active {
+        Block::default()
+            .borders(Borders::LEFT)
+            .border_style(Style::default().fg(Color::Cyan))
+    } else {
+        Block::default()
+    };
+    
+    f.render_widget(paragraph.block(block), area);
+}
+
+// 辅助函数
+fn format_timestamp(ts: &str) -> String {
+    // 只显示时:分:秒
+    ts.split('T')
+        .nth(1)
+        .and_then(|t| t.split('.').next())
+        .unwrap_or(ts)
+        .to_string()
+}
+
+fn format_args_preview(args: &serde_json::Value, max_len: usize) -> String {
+    let s = args.to_string();
+    if s.len() <= max_len {
+        s
+    } else {
+        format!("{}...", &s[..max_len])
+    }
+}
+
+fn shorten_text(text: &str, max_len: usize) -> String {
+    if text.len() <= max_len {
+        text.to_string()
+    } else {
+        format!("{}...", &text[..max_len])
+    }
+    
+    // 提示行
+    let hint = match app.input_mode {
+        InputMode::Normal => {
+            "Normal Mode  ⌨ Press : for commands, / for search, Tab to switch"
+# Normal Mode 快捷键
+quit = ["q", "Q", "Ctrl+C"]
+scroll_up = ["Up", "k"]
+scroll_down = ["Down", "j"]
+scroll_left = ["Left", "h"]
+scroll_right = ["Right", "l"]
+page_up = ["Ctrl+U", "PageUp"]
+page_down = ["Ctrl+D", "PageDown"]
+next_panel = ["Tab"]
+prev_panel = ["Shift+Tab"]
+pause = ["p"]
+toggle_expand = ["Space"]
+copy_line = ["y"]
+copy_all = ["Y"]
+
+# Mode 切换键
+command_mode = [":"]
+search_mode = ["/"]
+filter_mode = ["?"]
+
+# 搜索导航
+search_next = ["n"]
+search_prev = ["N
+        InputMode::Filter => {
+            "Filter Mode  Type pattern and press Enter (Esc to clear)"
+        }
+    };
+    
+    let hint_widget = Paragraph::new(hint)
+        .style(Style::default().fg(Color::DarkGray))
+        .alignment(Alignment::Left);
+    f.render_widget(hint_widget, lines[1]);
 }
 ```
 
