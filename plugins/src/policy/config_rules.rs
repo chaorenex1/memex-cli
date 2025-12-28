@@ -20,9 +20,7 @@ impl PolicyPlugin for ConfigPolicyPlugin {
     }
 
     async fn check(&self, event: &ToolEvent) -> PolicyAction {
-        let inner_cfg = match &self.config.provider {
-            PolicyProvider::Config(c) => c,
-        };
+        let PolicyProvider::Config(inner_cfg) = &self.config.provider;
 
         let tool_name = event.tool.as_deref().unwrap_or("unknown");
         let action_name = event.action.as_deref();
@@ -30,8 +28,11 @@ impl PolicyPlugin for ConfigPolicyPlugin {
         // 1. Check denylist
         for rule in &inner_cfg.denylist {
             if rule_matches(rule, tool_name, action_name) {
-                return PolicyAction::Deny { 
-                    reason: rule.reason.clone().unwrap_or_else(|| "Denied by rule".into()) 
+                return PolicyAction::Deny {
+                    reason: rule
+                        .reason
+                        .clone()
+                        .unwrap_or_else(|| "Denied by rule".into()),
                 };
             }
         }
@@ -46,8 +47,12 @@ impl PolicyPlugin for ConfigPolicyPlugin {
         // 3. Default action
         match inner_cfg.default_action.as_str() {
             "allow" => PolicyAction::Allow,
-            "ask" => PolicyAction::Ask { prompt: format!("Allow tool {}?", tool_name) },
-            _ => PolicyAction::Deny { reason: "Default deny".into() },
+            "ask" => PolicyAction::Ask {
+                prompt: format!("Allow tool {}?", tool_name),
+            },
+            _ => PolicyAction::Deny {
+                reason: "Default deny".into(),
+            },
         }
     }
 }
@@ -63,16 +68,16 @@ fn rule_matches(rule: &memex_core::config::PolicyRule, tool: &str, action: Optio
         }
         return true; // Rule matches tool, no action specified (matches all)
     }
-    
+
     // Handle "git.*" style
     if rule.tool.ends_with(".*") {
         let prefix = &rule.tool[..rule.tool.len() - 2];
         if tool.starts_with(prefix) {
-             // We don't check action if tool matches wildcard prefix? 
-             // Logic depends on requirement. Assuming yes for now.
-             return true; 
+            // We don't check action if tool matches wildcard prefix?
+            // Logic depends on requirement. Assuming yes for now.
+            return true;
         }
     }
-    
+
     false
 }

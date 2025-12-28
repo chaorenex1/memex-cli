@@ -1,4 +1,4 @@
-﻿use crate::gatekeeper::{Gatekeeper, GatekeeperConfig, SearchMatch};
+use crate::gatekeeper::{Gatekeeper, GatekeeperConfig, SearchMatch};
 use crate::memory::parse_search_matches;
 use crate::replay::model::ReplayRun;
 use crate::runner::RunOutcome;
@@ -28,7 +28,10 @@ pub fn rerun_gatekeeper_for_run(
         };
     };
 
-    let matches_v = data.get("matches").cloned().unwrap_or(serde_json::Value::Null);
+    let matches_v = data
+        .get("matches")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     let matches: Vec<SearchMatch> = match parse_search_matches(&matches_v) {
         Ok(m) => m,
         Err(e) => {
@@ -66,7 +69,10 @@ fn build_run_outcome_from_exit(run: &ReplayRun) -> RunOutcome {
     if let Some(exit) = &run.runner_exit {
         if let Some(d) = &exit.data {
             out.exit_code = d.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-999) as i32;
-            out.duration_ms = d.get("duration_ms").and_then(|v| v.as_i64()).map(|x| x as u64);
+            out.duration_ms = d
+                .get("duration_ms")
+                .and_then(|v| v.as_i64())
+                .map(|x| x as u64);
             out.stdout_tail = d
                 .get("stdout_tail")
                 .and_then(|v| v.as_str())
@@ -80,12 +86,12 @@ fn build_run_outcome_from_exit(run: &ReplayRun) -> RunOutcome {
             out.shown_qa_ids = d
                 .get("shown_qa_ids")
                 .and_then(|v| v.as_array())
-                .map(arr_str)
+                .map(|a| arr_str(a))
                 .unwrap_or_default();
             out.used_qa_ids = d
                 .get("used_qa_ids")
                 .and_then(|v| v.as_array())
-                .map(arr_str)
+                .map(|a| arr_str(a))
                 .unwrap_or_default();
         }
     }
@@ -93,7 +99,7 @@ fn build_run_outcome_from_exit(run: &ReplayRun) -> RunOutcome {
     out
 }
 
-fn arr_str(a: &Vec<serde_json::Value>) -> Vec<String> {
+fn arr_str(a: &[serde_json::Value]) -> Vec<String> {
     a.iter()
         .filter_map(|x| x.as_str().map(|s| s.to_string()))
         .collect()
