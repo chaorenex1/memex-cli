@@ -10,5 +10,4 @@ pub mod runner;
 pub mod state;
 pub mod stream;
 pub mod tool_event;
-pub mod tui;
 pub mod util;

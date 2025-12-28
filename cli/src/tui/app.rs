@@ -3,9 +3,9 @@ use std::time::Instant;
 
 use crossterm::event::KeyEvent;
 use memex_core::config::TuiConfig;
+use memex_core::runner::RunnerEvent;
 use memex_core::state::types::RuntimePhase;
 use memex_core::tool_event::ToolEvent;
-use memex_core::tui::TuiEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelKind {
@@ -135,13 +135,13 @@ impl TuiApp {
         }
     }
 
-    pub fn handle_event(&mut self, event: TuiEvent) {
+    pub fn handle_event(&mut self, event: RunnerEvent) {
         match event {
-            TuiEvent::ToolEvent(ev) => self.push_tool_event(*ev),
-            TuiEvent::AssistantOutput(line) => self.push_assistant_line(line),
-            TuiEvent::RawStdout(line) => self.push_raw_line(line, false),
-            TuiEvent::RawStderr(line) => self.push_raw_line(line, true),
-            TuiEvent::Error(err) => {
+            RunnerEvent::ToolEvent(ev) => self.push_tool_event(*ev),
+            RunnerEvent::AssistantOutput(line) => self.push_assistant_line(line),
+            RunnerEvent::RawStdout(line) => self.push_raw_line(line, false),
+            RunnerEvent::RawStderr(line) => self.push_raw_line(line, true),
+            RunnerEvent::Error(err) => {
                 // CLI internal errors - output to raw_output as stderr AND set error status
                 self.push_raw_line(format!("[CLI ERROR] {}", err), true);
                 tracing::error!("CLI internal error: {}", err);
@@ -149,8 +149,8 @@ impl TuiApp {
                 self.pending_qa = false;
                 self.qa_started_at = None;
             }
-            TuiEvent::StatusUpdate { .. } => {}
-            TuiEvent::StateUpdate {
+            RunnerEvent::StatusUpdate { .. } => {}
+            RunnerEvent::StateUpdate {
                 phase,
                 memory_hits,
                 tool_events,
@@ -161,7 +161,7 @@ impl TuiApp {
                 self.pending_qa = false;
                 self.qa_started_at = None;
             }
-            TuiEvent::RunComplete { exit_code } => {
+            RunnerEvent::RunComplete { exit_code } => {
                 self.status = RunStatus::Completed(exit_code);
                 self.pending_qa = false;
                 self.qa_started_at = None;

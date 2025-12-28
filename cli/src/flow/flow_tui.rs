@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
-use memex_core::config::{ControlConfig, TuiConfig};
+use memex_core::config::TuiConfig;
 use memex_core::error::RunnerError;
 use memex_core::events_out::EventsOutTx;
 use memex_core::memory::MemoryPlugin;
-use memex_core::runner::{run_session, PolicyPlugin, RunnerResult, RunnerSession};
+use memex_core::runner::{run_session, PolicyPlugin, RunnerResult};
 use memex_core::state::types::{RuntimePhase, StateEvent};
 use memex_core::state::StateManager;
-use memex_core::tui::TuiEvent;
+use memex_core::runner::RunnerEvent;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use crate::commands::cli::{Args, RunArgs};
 use crate::flow::flow_qa::run_with_query;
-use crate::tui::{restore_terminal, run_with_tui_on_terminal, setup_terminal, TuiApp};
+use crate::tui::{restore_terminal, setup_terminal, TuiApp};
 
 // Unified error handling for TUI
 fn handle_tui_error(tui_app: &mut TuiApp, error: &str, severity: &str) {
@@ -52,12 +52,12 @@ pub async fn run_tui_flow(
     state_manager: Option<Arc<StateManager>>,
     events_out_tx: Option<EventsOutTx>,
     run_id: String,
-    recover_run_id: Option<String>,
+    _recover_run_id: Option<String>,
     stream_enabled: bool,
     stream_format: &str,
     stream_silent: bool,
-    policy: Option<Box<dyn PolicyPlugin>>,
-    memory: Option<Box<dyn MemoryPlugin>>,
+    _policy: Option<Box<dyn PolicyPlugin>>,
+    _memory: Option<Box<dyn MemoryPlugin>>,
     _gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
 ) -> Result<i32, RunnerError> {
     let mut tui = TuiRuntime::new(&cfg.tui, run_id.clone())?;
@@ -180,6 +180,8 @@ pub async fn run_tui_flow(
             },
         )
         .await;
+
+        input_reader.stop();
 
         // Handle result and wait for user to review before next prompt
         match result {
@@ -304,7 +306,7 @@ async fn run_tui_session_continuing(
                             }
                             _ => {}
                         }
-                        let _ = tui_tx_state.send(memex_core::tui::TuiEvent::StateUpdate {
+                        let _ = tui_tx_state.send(RunnerEvent::StateUpdate {
                             phase,
                             memory_hits,
                             tool_events,

@@ -12,11 +12,11 @@ use crate::events_out::EventsOutTx;
 use crate::state::types::RuntimePhase;
 use crate::state::StateManager;
 use crate::tool_event::{CompositeToolEventParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
-use crate::tui::TuiEvent;
 use crate::util::RingBytes;
 
 use super::tee;
 use super::tee::LineStream;
+use super::RunnerEvent;
 use super::traits::{PolicyPlugin, RunnerSession};
 use super::types::{PolicyAction, RunnerResult, Signal};
 
@@ -27,7 +27,7 @@ pub async fn run_session(
     policy: Option<Box<dyn PolicyPlugin>>,
     capture_bytes: usize,
     events_out: Option<EventsOutTx>,
-    tui_tx: Option<mpsc::UnboundedSender<TuiEvent>>,
+    tui_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
     run_id: &str,
     silent: bool,
     state_manager: Option<Arc<StateManager>>,
@@ -117,10 +117,10 @@ pub async fn run_session(
                         if let Some(tx) = &tui_tx {
                             match tap.stream {
                                 LineStream::Stdout => {
-                                    let _ = tx.send(TuiEvent::RawStdout(tap.line.clone()));
+                                    let _ = tx.send(RunnerEvent::RawStdout(tap.line.clone()));
                                 }
                                 LineStream::Stderr => {
-                                    let _ = tx.send(TuiEvent::RawStderr(tap.line.clone()));
+                                    let _ = tx.send(RunnerEvent::RawStderr(tap.line.clone()));
                                 }
                             }
                         }
@@ -155,7 +155,7 @@ pub async fn run_session(
                                 });
                             }
                             if let Some(tx) = &tui_tx {
-                                let _ = tx.send(TuiEvent::ToolEvent(Box::new(ev.clone())));
+                                let _ = tx.send(RunnerEvent::ToolEvent(Box::new(ev.clone())));
                             }
                             if ev.event_type == "tool.request" {
                                 if let Some(p) = &policy {
@@ -176,7 +176,7 @@ pub async fn run_session(
                             }
                         } else if matches!(tap.stream, LineStream::Stdout) {
                             if let Some(tx) = &tui_tx {
-                                let _ = tx.send(TuiEvent::AssistantOutput(tap.line.clone()));
+                                let _ = tx.send(RunnerEvent::AssistantOutput(tap.line.clone()));
                             }
                         }
                     }
@@ -215,8 +215,8 @@ pub async fn run_session(
         )
         .await;
         if let Some(tx) = &tui_tx {
-            let _ = tx.send(TuiEvent::Error(reason.clone()));
-            let _ = tx.send(TuiEvent::RunComplete { exit_code: 40 });
+            let _ = tx.send(RunnerEvent::Error(reason.clone()));
+            let _ = tx.send(RunnerEvent::RunComplete { exit_code: 40 });
         }
         return Ok(RunnerResult {
             run_id: effective_run_id.to_string(),
@@ -262,7 +262,7 @@ pub async fn run_session(
     }
 
     if let Some(tx) = &tui_tx {
-        let _ = tx.send(TuiEvent::RunComplete { exit_code });
+        let _ = tx.send(RunnerEvent::RunComplete { exit_code });
     }
 
     Ok(RunnerResult {

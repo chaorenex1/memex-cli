@@ -3,7 +3,7 @@ use std::time::Duration;
 use memex_core::config::TuiConfig;
 use memex_core::error::RunnerError;
 use memex_core::runner::RunnerResult;
-use memex_core::tui::TuiEvent;
+use memex_core::runner::RunnerEvent;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -17,7 +17,7 @@ use super::TuiApp;
 pub async fn run_with_tui(
     run_id: String,
     cfg: &TuiConfig,
-    event_rx: mpsc::UnboundedReceiver<TuiEvent>,
+    event_rx: mpsc::UnboundedReceiver<RunnerEvent>,
     run_task: tokio::task::JoinHandle<Result<RunnerResult, RunnerError>>,
 ) -> Result<RunnerResult, RunnerError> {
     let mut app = TuiApp::new(cfg.clone(), run_id);
@@ -30,7 +30,7 @@ pub async fn run_with_tui(
 pub async fn run_with_tui_on_terminal(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut TuiApp,
-    mut event_rx: mpsc::UnboundedReceiver<TuiEvent>,
+    mut event_rx: mpsc::UnboundedReceiver<RunnerEvent>,
     mut run_task: tokio::task::JoinHandle<Result<RunnerResult, RunnerError>>,
 ) -> Result<RunnerResult, RunnerError> {
     tracing::debug!("TUI event loop starting");

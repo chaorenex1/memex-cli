@@ -8,6 +8,7 @@ use super::events::{InputReader, InputEvent};
 use super::ui;
 use super::{InputMode, PromptAction, TuiApp};
 
+#[allow(dead_code)]
 pub async fn prompt_in_tui(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut TuiApp,
