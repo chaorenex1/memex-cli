@@ -2,8 +2,9 @@ use chrono::Utc;
 
 use crate::commands::cli::{Args, BackendKind, RunArgs, TaskLevel};
 use memex_core::config::MemoryProvider;
+use memex_core::context::AppContext;
 use memex_core::error::RunnerError;
-use memex_core::events_out::{start_events_out, write_wrapper_event};
+use memex_core::events_out::write_wrapper_event;
 use memex_core::gatekeeper::config::GatekeeperConfig as LogicGatekeeperConfig;
 use memex_core::gatekeeper::{Gatekeeper, GatekeeperDecision, SearchMatch};
 use memex_core::memory::InjectPlacement;
@@ -13,18 +14,22 @@ use memex_core::memory::{
     merge_prompt, render_memory_context, CandidateDraft, CandidateExtractConfig, QASearchPayload,
 };
 use memex_core::runner::{run_session, RunOutcome, RunnerResult, RunnerStartArgs};
+use memex_core::state::types::{GatekeeperDecisionSnapshot, RuntimePhase};
+use memex_core::state::StateManagerHandle;
 use memex_core::tool_event::{ToolEventLite, WrapperEvent};
 
 use memex_plugins::factory;
 
-#[tracing::instrument(name = "cli.run_app", skip(args, run_args, cfg))]
+#[tracing::instrument(name = "cli.run_app", skip(args, run_args, ctx))]
 pub async fn run_app_with_config(
     args: Args,
     run_args: Option<RunArgs>,
     recover_run_id: Option<String>,
-    mut cfg: memex_core::config::AppConfig,
+    ctx: &AppContext,
 ) -> Result<i32, RunnerError> {
     let args = args;
+    let mut cfg = ctx.cfg().clone();
+    let state_manager = ctx.state_manager();
 
     let mut prompt_text: Option<String> = None;
 
@@ -76,9 +81,7 @@ pub async fn run_app_with_config(
     };
     tracing::info!(task_level = ?effective_task_level, "task level selected");
 
-    let events_out_tx = start_events_out(&cfg.events_out)
-        .await
-        .map_err(RunnerError::Spawn)?;
+    let events_out_tx = ctx.events_out();
 
     let memory = factory::build_memory(&cfg).map_err(|e| RunnerError::Spawn(e.to_string()))?;
     let policy = factory::build_policy(&cfg);
@@ -88,6 +91,22 @@ pub async fn run_app_with_config(
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     tracing::debug!(run_id = %run_id, stream_format = %stream_format, "run initialized");
+
+    let mut state_handle: Option<StateManagerHandle> = None;
+    let mut state_session_id: Option<String> = None;
+    if let Some(manager) = state_manager.as_ref() {
+        let handle = manager.handle();
+        let session_id = handle
+            .create_session(Some(run_id.clone()))
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+        handle
+            .transition_phase(&session_id, RuntimePhase::Initializing)
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+        state_handle = Some(handle);
+        state_session_id = Some(session_id);
+    }
 
     let gk_logic_cfg: LogicGatekeeperConfig = cfg.gatekeeper_logic_config();
 
@@ -118,6 +137,13 @@ pub async fn run_app_with_config(
         MemoryProvider::Service(svc_cfg) => (svc_cfg.search_limit, svc_cfg.min_score),
     };
 
+    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
+        handle
+            .transition_phase(session_id, RuntimePhase::MemorySearch)
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    }
+
     let (_merged_query, shown_qa_ids, matches, memory_search_event) = build_merged_prompt(
         memory.as_deref(),
         &cfg.project_id,
@@ -128,6 +154,16 @@ pub async fn run_app_with_config(
         &inject_cfg,
     )
     .await;
+
+    if let (Some(manager), Some(session_id)) = (&state_manager, state_session_id.as_deref()) {
+        manager
+            .update_session(session_id, |session| {
+                session.increment_memory_hits(matches.len());
+            })
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+        manager.emit_memory_hit(session_id, matches.len()).await;
+    }
 
     // Buffer early wrapper events until we learn the effective run_id (session_id).
     // This keeps IDs consistent across the whole wrapper-event stream.
@@ -202,11 +238,31 @@ pub async fn run_app_with_config(
     }));
     pending_wrapper_events.push(start_event);
 
+    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
+        handle
+            .transition_phase(session_id, RuntimePhase::RunnerStarting)
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    }
+
     // Start Session
-    let session = runner
-        .start_session(&session_args)
-        .await
-        .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    let session = match runner.start_session(&session_args).await {
+        Ok(session) => session,
+        Err(e) => {
+            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref())
+            {
+                let _ = handle.fail(session_id, e.to_string()).await;
+            }
+            return Err(RunnerError::Spawn(e.to_string()));
+        }
+    };
+
+    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
+        handle
+            .transition_phase(session_id, RuntimePhase::RunnerRunning)
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    }
 
     // Run Session (Core Logic)
     let run_result = match run_session(
@@ -217,11 +273,17 @@ pub async fn run_app_with_config(
         events_out_tx.clone(),
         &run_id,
         stream_plan.silent,
+        state_manager.clone(),
+        state_session_id.clone(),
     )
     .await
     {
         Ok(r) => r,
         Err(e) => {
+            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref())
+            {
+                let _ = handle.fail(session_id, e.to_string()).await;
+            }
             // Best-effort: still emit buffered wrapper events so the run has a trace,
             // using the configured run_id (no session_id discovered).
             for mut ev in pending_wrapper_events {
@@ -249,7 +311,39 @@ pub async fn run_app_with_config(
 
     let run_outcome: RunOutcome = build_run_outcome(&run_result, shown_qa_ids);
 
+    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
+        handle
+            .transition_phase(session_id, RuntimePhase::GatekeeperEvaluating)
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    }
+
     let decision = gatekeeper.evaluate(Utc::now(), &matches, &run_outcome, &run_result.tool_events);
+
+    if let (Some(manager), Some(session_id)) = (&state_manager, state_session_id.as_deref()) {
+        let signals = decision
+            .signals
+            .as_object()
+            .map(|map| {
+                map.iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        manager
+            .update_session(session_id, |session| {
+                session.set_gatekeeper_decision(GatekeeperDecisionSnapshot {
+                    should_write_candidate: decision.should_write_candidate,
+                    reasons: decision.reasons.clone(),
+                    signals,
+                });
+            })
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+        manager
+            .emit_gatekeeper_decision(session_id, decision.should_write_candidate)
+            .await;
+    }
 
     let mut decision_event = WrapperEvent::new("gatekeeper.decision", Utc::now().to_rfc3339());
     decision_event.run_id = Some(effective_run_id.clone());
@@ -259,6 +353,13 @@ pub async fn run_app_with_config(
     write_wrapper_event(events_out_tx.as_ref(), &decision_event).await;
 
     if let Some(mem) = &memory {
+        if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
+            handle
+                .transition_phase(session_id, RuntimePhase::MemoryPersisting)
+                .await
+                .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+        }
+
         let tool_events_lite: Vec<ToolEventLite> =
             run_result.tool_events.iter().map(|e| e.into()).collect();
 
@@ -275,6 +376,13 @@ pub async fn run_app_with_config(
         };
 
         post_run_memory_reporting(mem.as_ref(), &cfg.project_id, &decision, candidate_drafts).await;
+    }
+
+    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
+        handle
+            .complete(session_id, run_outcome.exit_code)
+            .await
+            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
     }
 
     let mut exit_event = WrapperEvent::new("run.end", Utc::now().to_rfc3339());

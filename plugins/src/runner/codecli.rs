@@ -26,13 +26,22 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
     }
 
     async fn start_session(&self, args: &RunnerStartArgs) -> Result<Box<dyn RunnerSession>> {
-        let child = Command::new(&args.cmd)
-            .args(&args.args)
+        let mut cmd = Command::new(&args.cmd);
+        cmd.args(&args.args)
             .envs(&args.envs)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+
+        // Windows: 防止弹出控制台窗口
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x08000000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+
+        let child = cmd.spawn()?;
 
         Ok(Box::new(CodeCliRunnerSession { child }))
     }

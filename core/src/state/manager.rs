@@ -56,6 +56,36 @@ impl StateManager {
         let _ = self.inner.event_tx.send(event);
     }
 
+    /// 发送工具事件统计
+    pub async fn emit_tool_event_received(&self, session_id: &str, event_count: usize) {
+        self.emit_event(StateEvent::ToolEventReceived {
+            session_id: session_id.to_string(),
+            event_count,
+            timestamp: Utc::now(),
+        })
+        .await;
+    }
+
+    /// 发送记忆命中统计
+    pub async fn emit_memory_hit(&self, session_id: &str, hit_count: usize) {
+        self.emit_event(StateEvent::MemoryHit {
+            session_id: session_id.to_string(),
+            hit_count,
+            timestamp: Utc::now(),
+        })
+        .await;
+    }
+
+    /// 发送 Gatekeeper 决策
+    pub async fn emit_gatekeeper_decision(&self, session_id: &str, should_write: bool) {
+        self.emit_event(StateEvent::GatekeeperDecision {
+            session_id: session_id.to_string(),
+            should_write,
+            timestamp: Utc::now(),
+        })
+        .await;
+    }
+
     /// 获取应用状态
     pub async fn get_app_state(&self) -> AppState {
         self.inner.app_state.read().await.clone()

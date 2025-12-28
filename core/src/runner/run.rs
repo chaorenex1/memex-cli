@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -8,6 +9,8 @@ use tokio::sync::mpsc;
 use crate::config::ControlConfig;
 use crate::error::RunnerError;
 use crate::events_out::EventsOutTx;
+use crate::state::types::RuntimePhase;
+use crate::state::StateManager;
 use crate::tool_event::{CompositeToolEventParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
 use crate::util::RingBytes;
 
@@ -23,10 +26,13 @@ pub async fn run_session(
     events_out: Option<EventsOutTx>,
     run_id: &str,
     silent: bool,
+    state_manager: Option<Arc<StateManager>>,
+    session_id: Option<String>,
 ) -> Result<RunnerResult, RunnerError> {
     let _span = tracing::info_span!(
         "core.run_session",
         run_id = %run_id,
+        session_id = %session_id.as_deref().unwrap_or(""),
         capture_bytes = capture_bytes,
         silent = silent,
         fail_mode = %control.fail_mode,
@@ -81,6 +87,7 @@ pub async fn run_session(
 
         let mut status = None;
         let mut reason = None;
+        let mut tool_events_started = false;
 
         loop {
             tokio::select! {
@@ -104,6 +111,33 @@ pub async fn run_session(
                 tap = line_rx.recv() => {
                     if let Some(tap) = tap {
                         if let Some(ev) = tool_runtime.observe_line(&tap.line).await {
+                            if let (Some(manager), Some(session_id)) = (&state_manager, &session_id)
+                            {
+                                if !tool_events_started {
+                                    tool_events_started = true;
+                                    let manager = manager.clone();
+                                    let session_id = session_id.clone();
+                                    tokio::spawn(async move {
+                                        let _ = manager
+                                            .transition_session_phase(
+                                                &session_id,
+                                                RuntimePhase::ProcessingToolEvents,
+                                            )
+                                            .await;
+                                    });
+                                }
+
+                                let manager = manager.clone();
+                                let session_id = session_id.clone();
+                                tokio::spawn(async move {
+                                    let _ = manager
+                                        .update_session(&session_id, |session| {
+                                            session.increment_tool_events(1);
+                                        })
+                                        .await;
+                                    manager.emit_tool_event_received(&session_id, 1).await;
+                                });
+                            }
                             if ev.event_type == "tool.request" {
                                 if let Some(p) = &policy {
                                     match p.check(&ev).await {
@@ -189,10 +223,21 @@ pub async fn run_session(
         .unwrap_or(run_id)
         .to_string();
 
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+    if let (Some(manager), Some(session_id)) = (&state_manager, &session_id) {
+        let _ = manager
+            .update_session(session_id, |session| {
+                session.update_metrics(|metrics| {
+                    metrics.runner_duration_ms = Some(duration_ms);
+                });
+            })
+            .await;
+    }
+
     Ok(RunnerResult {
         run_id: effective_run_id,
         exit_code,
-        duration_ms: Some(start_time.elapsed().as_millis() as u64),
+        duration_ms: Some(duration_ms),
         stdout_tail,
         stderr_tail,
         tool_events,

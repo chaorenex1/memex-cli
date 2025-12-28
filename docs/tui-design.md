@@ -41,9 +41,11 @@ cli/src/
     app.rs           - TUI 应用状态管理
     ui.rs            - UI 布局渲染
     events.rs        - 事件处理（键盘、鼠标）
+    splash.rs        - 启动画面
     widgets/         - 自定义 widget
       tool_event.rs  - 工具事件展示组件
       output.rs      - 输出流展示组件
+      banner.rs      - ASCII 艺术字和标语
 ```
 
 ### 4.2 集成点
@@ -72,6 +74,49 @@ let stream = factory::build_stream(stream_format);
 ```
 
 ## 五、UI 布局设计
+
+### 5.0 启动画面（Splash Screen）
+
+TUI 启动时显示品牌化的启动画面，停留 1-2 秒后自动进入主界面：
+
+```
+╭─────────────────────────────────────────────────────────────────────╮
+│                                                                       │
+│                                                                       │
+│        __  __                                                         │
+│        |  \/  | ___ _ __ ___   _____  __                             │
+│        | |\/| |/ _ \ '_ ` _ \ / _ \ \/ /                             │
+│        | |  | |  __/ | | | | |  __/>  <                              │
+│        |_|  |_|\___|_| |_| |_|\___/_/\_\  CLI                        │
+│        --------------------------------------                        │
+│         > Memory Layer & Code Engine Wrapper                         │
+│                                                                       │
+│                                                                       │
+│                   🚀 Initializing Memex CLI...                       │
+│                                                                       │
+│                      Version: 0.1.0                                  │
+│                      Status: Streaming | Gatekeeper: ON              │
+│                                                                       │
+│                                                                       │
+│                   Loading configuration... ✓                         │
+│                   Connecting to backend... ✓                         │
+│                   Starting TUI interface...                          │
+│                                                                       │
+│                                                                       │
+│                                                                       │
+╰─────────────────────────────────────────────────────────────────────╯
+```
+
+**启动流程：**
+1. 显示 ASCII Art Logo（0.5s）
+2. 显示版本和状态信息（0.5s）
+3. 显示加载进度（实时）
+4. 加载完成后淡出进入主界面（0.5s）
+
+**可配置项：**
+- `tui.show_splash` - 是否显示启动画面（默认：true）
+- `tui.splash_duration_ms` - 最小停留时间（默认：1500ms）
+- `tui.splash_animation` - 启用加载动画（默认：true）
 
 ### 5.1 整体布局
 
@@ -309,6 +354,9 @@ async fn run_tui_loop(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut tick_interval = tokio::time::interval(Duration::from_millis(50));
     
+    // 初始绘制启动画面
+    terminal.draw(|f| ui::draw(f, app))?;
+    
     loop {
         tokio::select! {
             // 处理 TUI 事件
@@ -320,7 +368,8 @@ async fn run_tui_loop(
             // 处理用户输入
             Ok(true) = poll_user_input() => {
                 if let Some(input) = read_user_input()? {
-                    if app.handle_user_input(input) {
+                    // 启动画面期间禁用用户输入
+                    if !app.is_initializing() && app.handle_user_input(input) {
                         break; // 用户退出
                     }
                     terminal.draw(|f| ui::draw(f, app))?;
@@ -329,6 +378,11 @@ async fn run_tui_loop(
             
             // 定时刷新（处理动画、状态更新等）
             _ = tick_interval.tick() => {
+                // 更新启动进度
+                if app.is_initializing() {
+                    app.update_splash_progress();
+                }
+                
                 app.tick();
                 terminal.draw(|f| ui::draw(f, app))?;
             }
@@ -375,6 +429,11 @@ pub struct TuiApp {
     token_count: u64,
     tool_call_count: usize,
     
+    // 启动状态
+    is_splash_showing: bool,
+    splash_progress: f32,
+    splash_start_time: Instant,
+    
     // 搜索状态
     search_query: String,
     search_results: Vec<SearchResult>,
@@ -406,11 +465,32 @@ pub enum NotificationLevel {
 
 pub enum PanelKind {
     ToolEvents,
-    AssistantOutput,
-    RawOutput,
+    AssistantOutp  // 启动中（显示 splash）
+    Running,       // 正常运行
+    Paused,        // 已暂停
+    Completed(i32),// 已完成（退出码）
+    Error(String), // 出错
 }
 
-pub enum RunStatus {
+impl TuiApp {
+    pub fn is_initializing(&self) -> bool {
+        matches!(self.status, RunStatus::Initializing) && self.is_splash_showing
+    }
+    
+    pub fn update_splash_progress(&mut self) {
+        let elapsed = self.splash_start_time.elapsed();
+        let min_duration = Duration::from_millis(1500);
+        
+        // 根据实际初始化进度和时间计算进度
+        self.splash_progress = (elapsed.as_millis() as f32 / min_duration.as_millis() as f32)
+            .min(1.0);
+        
+        // 进度达到 100% 后关闭启动画面
+        if self.splash_progress >= 1.0 && matches!(self.status, RunStatus::Initializing) {
+            self.is_splash_showing = false;
+            self.status = RunStatus::Running;
+        }
+    } {
     Initializing,
     Running,
     Paused,
@@ -593,8 +673,13 @@ impl TuiApp {
 
 ### 8.1 主渲染函数
 
-```rust
-pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut TuiApp) {
+```r// 如果在启动状态，显示启动画面
+    if app.is_initializing() {
+        draw_splash_screen(f, f.size(), app);
+        return;
+    }
+    
+    // 主界面布局
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -605,6 +690,131 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut TuiApp) {
         .split(f.size());
     
     draw_header(f, chunks[0], app);
+    draw_main_content(f, chunks[1], app);
+    draw_input_bar(f, chunks[2], app);
+}
+
+// 绘制启动画面
+fn draw_splash_screen<B: Backend>(f: &mut Frame<B>, area: Rect, app: &TuiApp) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(Color::Cyan));
+    
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    
+    // ASCII Art Banner
+    let banner = vec![
+        "",
+        "      __  __                      ",
+        "      |  \\/  | ___ _ __ ___   _____  __",
+        "      | |\\/| |/ _ \\ '_ ` _ \\ / _ \\ \\/ /",
+        "      | |  | |  __/ | | | | |  __/>  < ",
+        "      |_|  |_|\\___|_| |_| |_|\\___/_/\\_\\  CLI",
+        "      --------------------------------------",
+        "       > Memory Layer & Code Engine Wrapper",
+        "",
+        "",
+    ];
+    
+    let banner_height = banner.len() as u16;
+    let start_y = (inner.height.saturating_sub(banner_height + 10)) / 2;
+    
+    // 渲染 Banner
+    for (i, line) in banner.iter().enumerate() {
+        let y = inner.y + start_y + i as u16;
+        if y < inner.y + inner.height {
+            let banner_line = Paragraph::new(*line)
+                .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                .alignment(Alignment::Center);
+            let line_area = Rect {
+                x: inner.x,
+                y,
+                width: inner.width,
+                height: 1,
+            };
+            f.render_widget(banner_line, line_area);
+        }
+    }
+    
+    // 状态信息
+    let status_y = inner.y + start_y + banner_height + 2;
+    
+    // 初始化消息
+    let init_msg = if app.splash_progress < 0.3 {
+        "🚀 Initializing Memex CLI..."
+    } else if app.splash_progress < 0.6 {
+        "🚀 Loading configuration... ✓"
+    } else if app.splash_progress < 0.9 {
+        "🚀 Connecting to backend... ✓"
+    } else {
+        "🚀 Starting TUI interface..."
+    };
+    
+    let init_line = Paragraph::new(init_msg)
+        .style(Style::default().fg(Color::Yellow))
+        .alignment(Alignment::Center);
+    f.render_widget(init_line, Rect {
+        x: inner.x,
+        y: status_y,
+        width: inner.width,
+        height: 1,
+    });
+    
+    // 版本信息
+    let version_line = Paragraph::new(format!(
+        "Version: {}",
+        env!("CARGO_PKG_VERSION")
+    ))
+    .style(Style::default().fg(Color::DarkGray))
+    .alignment(Alignment::Center);
+    f.render_widget(version_line, Rect {
+        x: inner.x,
+        y: status_y + 2,
+        width: inner.width,
+        height: 1,
+    });
+    
+    // 状态信息
+    let status_info = format!(
+        "Status: {} | Gatekeeper: {}",
+        if app.config.stream { "Streaming" } else { "Batch" },
+        if app.config.gatekeeper_enabled { "ON" } else { "OFF" }
+    );
+    let status_line = Paragraph::new(status_info)
+        .style(Style::default().fg(Color::DarkGray))
+        .alignment(Alignment::Center);
+    f.render_widget(status_line, Rect {
+        x: inner.x,
+        y: status_y + 3,
+        width: inner.width,
+        height: 1,
+    });
+    
+    // 进度条（可选）
+    if app.splash_progress < 1.0 {
+        let progress_width = (inner.width as f32 * 0.6) as u16;
+        let progress_x = inner.x + (inner.width - progress_width) / 2;
+        let filled = (progress_width as f32 * app.splash_progress) as u16;
+        
+        let progress_bar = format!(
+            "[{}{}] {:.0}%",
+            "=".repeat(filled as usize),
+            " ".repeat((progress_width - filled) as usize),
+            app.splash_progress * 100.0
+        );
+        
+        let progress_line = Paragraph::new(progress_bar)
+            .style(Style::default().fg(Color::Green))
+            .alignment(Alignment::Center);
+        f.render_widget(progress_line, Rect {
+            x: progress_x,
+            y: status_y + 5,
+            width: progress_width,
+            height: 1,
+        });
+    }
     draw_main_content(f, chunks[1], app);
     draw_input_bar(f, chunks[2], app);
 }
@@ -875,6 +1085,11 @@ pub async fn run_with_tui_or_fallback(
 ) -> Result<i32, RunnerError> {
     match check_tui_support() {
         Ok(_) => {
+
+# 启动画面配置
+show_splash = true
+splash_duration_ms = 1500
+splash_animation = true
             match run_with_tui(args, run_args, cfg).await {
                 Ok(code) => Ok(code),
                 Err(e) => {
@@ -924,7 +1139,8 @@ search = ["/"]
 - 缓冲管理
 
 ### 12.2 集成测试
-- 模拟流式数据输入
+- 模拟流式数据启动画面（ASCII Banner + 进度显示）
+- [ ] 实现输入
 - 验证面板切换
 - 测试暂停/恢复
 

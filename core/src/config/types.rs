@@ -128,7 +128,7 @@ pub struct EventsOutConfig {
 impl Default for EventsOutConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             path: "./run.events.jsonl".to_string(),
             channel_capacity: 2048,
             drop_when_full: true,

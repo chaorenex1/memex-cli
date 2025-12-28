@@ -72,7 +72,7 @@ strict_secret_block = true
 confidence = 0.45
 
 [events_out]
-enabled = true
+enabled = false
 path = "./run.events.jsonl"
 channel_capacity = 2048
 drop_when_full = true
