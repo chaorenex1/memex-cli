@@ -919,6 +919,8 @@ dependencies = [
  "tokio-test",
  "toml",
  "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

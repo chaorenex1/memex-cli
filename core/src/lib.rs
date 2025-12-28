@@ -6,6 +6,7 @@ pub mod gatekeeper;
 pub mod memory;
 pub mod replay;
 pub mod runner;
+pub mod state;
 pub mod stream;
 pub mod tool_event;
 pub mod util;

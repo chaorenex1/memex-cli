@@ -1,8 +1,7 @@
-use clap::{Args as ClapArgs, Parser, Subcommand};
+﻿use clap::{Args as ClapArgs, Parser, Subcommand};
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
 pub enum BackendKind {
-    Auto,
     Codecli,
     Aiservice,
 }
@@ -40,8 +39,8 @@ pub struct RunArgs {
     /// - auto: URL => aiservice, otherwise => codecli
     /// - codecli: treat backend as a local binary name/path
     /// - aiservice: treat backend as an http(s) URL
-    #[arg(long, value_enum, default_value_t = BackendKind::Auto)]
-    pub backend_kind: BackendKind,
+    #[arg(long, value_enum)]
+    pub backend_kind: Option<BackendKind>,
 
     #[arg(long)]
     pub model: Option<String>,
@@ -71,6 +70,11 @@ pub struct RunArgs {
     /// Can be specified multiple times.
     #[arg(long = "env", action = clap::ArgAction::Append)]
     pub env: Vec<String>,
+
+    /// Load environment variables from a file (KEY=VALUE per line).
+    /// Lines starting with # are ignored. Empty lines are not allowed.
+    #[arg(long = "env-file", alias = "env_file")]
+    pub env_file: Option<String>,
 
     #[arg(long)]
     pub project_id: Option<String>,

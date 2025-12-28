@@ -5,6 +5,9 @@ pub struct AppConfig {
     #[serde(default = "default_project_id")]
     pub project_id: String,
 
+    #[serde(default = "default_backend_kind")]
+    pub backend_kind: String,
+
     #[serde(default)]
     pub logging: LoggingConfig,
 
@@ -37,10 +40,15 @@ fn default_project_id() -> String {
     "my-project".to_string()
 }
 
+fn default_backend_kind() -> String {
+    "codecli".to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             project_id: default_project_id(),
+            backend_kind: default_backend_kind(),
             logging: LoggingConfig::default(),
             control: ControlConfig::default(),
             policy: PolicyConfig::default(),

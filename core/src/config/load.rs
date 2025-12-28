@@ -10,13 +10,14 @@ pub fn load_default() -> anyhow::Result<AppConfig> {
         AppConfig::default()
     };
 
-    if let Ok(v) = std::env::var("MEM_CODECLI_PROJECT_ID") {
+    if let Ok(v) = std::env::var("MEM_CODECLI_BACKEND_KIND") {
         if !v.trim().is_empty() {
-            cfg.project_id = v;
+            cfg.backend_kind = v;
         }
     }
 
     let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
+
     if let Ok(v) = std::env::var("MEM_CODECLI_MEMORY_URL") {
         if !v.trim().is_empty() {
             svc_cfg.base_url = v;
