@@ -1,6 +1,6 @@
 use chrono::Utc;
 
-use crate::commands::cli::{Args, RunArgs, BackendKind};
+use crate::commands::cli::{Args, RunArgs, BackendKind, TaskLevel};
 use memex_core::config::MemoryProvider;
 use memex_core::memory::InjectPlacement;
 use memex_core::gatekeeper::config::GatekeeperConfig as LogicGatekeeperConfig;
@@ -68,6 +68,12 @@ pub async fn run_app_with_config(
     let stream_plan = stream.apply(&mut cfg);
 
     let user_query = prompt_text.clone().unwrap_or_else(|| args.codecli_args.join(" "));
+
+    let effective_task_level = match run_args.as_ref().map(|ra| ra.task_level) {
+        Some(TaskLevel::Auto) | None => infer_task_level(&user_query),
+        Some(lv) => lv,
+    };
+    tracing::info!(task_level = ?effective_task_level, "task level selected");
 
     let events_out_tx = start_events_out(&cfg.events_out)
         .await
@@ -177,6 +183,7 @@ pub async fn run_app_with_config(
     start_event.data = Some(serde_json::json!({
         "cmd": session_args.cmd.clone(),
         "args": session_args.args.clone(),
+        "task_level": format!("{effective_task_level:?}"),
     }));
     pending_wrapper_events.push(start_event);
 
@@ -273,6 +280,63 @@ pub async fn run_app_with_config(
     write_wrapper_event(events_out_tx.as_ref(), &exit_event).await;
 
     Ok(run_outcome.exit_code)
+}
+
+fn infer_task_level(prompt: &str) -> TaskLevel {
+    let s = prompt.trim();
+    if s.is_empty() {
+        return TaskLevel::L1;
+    }
+
+    let lower = s.to_ascii_lowercase();
+
+    // Strong engineering / multi-step signals => L2
+    if lower.contains("architecture")
+        || lower.contains("系统架构")
+        || lower.contains("设计")
+        || lower.contains("debug")
+        || lower.contains("根因")
+        || lower.contains("refactor")
+        || lower.contains("重构")
+        || lower.contains("compile")
+        || lower.contains("cargo")
+        || lower.contains("stack trace")
+        || lower.contains("日志")
+        || lower.contains("测试")
+        || lower.contains("benchmark")
+        || s.contains("```")
+    {
+        return TaskLevel::L2;
+    }
+
+    // High creativity / style-heavy signals => L3
+    if lower.contains("story")
+        || lower.contains("novel")
+        || lower.contains("brand")
+        || lower.contains("marketing")
+        || lower.contains("style")
+        || lower.contains("文案")
+        || lower.contains("世界观")
+        || lower.contains("小说")
+        || lower.contains("分镜")
+    {
+        return TaskLevel::L3;
+    }
+
+    // Very short tool-like requests => L0
+    if s.chars().count() <= 200
+        && (lower.contains("translate")
+            || lower.contains("翻译")
+            || lower.contains("format")
+            || lower.contains("格式化")
+            || lower.contains("json")
+            || lower.contains("rewrite")
+            || lower.contains("改写"))
+    {
+        return TaskLevel::L0;
+    }
+
+    TaskLevel::L1
 }
 
 fn build_run_outcome(run: &RunnerResult, shown_qa_ids: Vec<String>) -> RunOutcome {

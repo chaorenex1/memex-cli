@@ -7,6 +7,15 @@ pub enum BackendKind {
     Aiservice,
 }
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskLevel {
+    Auto,
+    L0,
+    L1,
+    L2,
+    L3,
+}
+
 #[derive(Parser, Debug)]
 pub struct Args {
     #[command(subcommand)]
@@ -36,6 +45,12 @@ pub struct RunArgs {
 
     #[arg(long)]
     pub model: Option<String>,
+
+    /// Task level for scheduling/strategy hints.
+    /// - auto: infer from prompt (fast heuristic)
+    /// - L0..L3: explicitly set
+    #[arg(long, value_enum, default_value_t = TaskLevel::Auto)]
+    pub task_level: TaskLevel,
 
     #[arg(long, group = "input")]
     pub prompt: Option<String>,
