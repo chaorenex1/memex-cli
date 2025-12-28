@@ -9,40 +9,45 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build & Upload (${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          # (optional) Path to changelog.
+          changelog: docs/CHANGELOG.md
+          # (required) GitHub token for creating GitHub Releases.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-assets:
+    needs: create-release
     strategy:
-      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
-
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
+      - name: Install cross-compilation tools
+        uses: taiki-e/setup-cross-toolchain-action@v1
         with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build & upload memex-cli binary
-        uses: taiki-e/upload-rust-binary-action@v1
-        with:
-          bin: memex-cli
           target: ${{ matrix.target }}
-          manifest-path: cli/Cargo.toml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          runner: none # Skip installation of cross-testing related tools because we only do cross-compilation.
+        if: startsWith(matrix.os, 'ubuntu')
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          # (required) Comma-separated list of binary names (non-extension portion of filename) to build and upload.
+          # Note that glob pattern is not supported yet.
+          bin: ...
+          # (optional) Target triple, default is host triple.
+          target: ${{ matrix.target }}
+          # (required) GitHub token for uploading assets to GitHub Releases.
+          token: ${{ secrets.GITHUB_TOKEN }}
