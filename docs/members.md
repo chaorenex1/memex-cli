@@ -20,9 +20,10 @@
 
 接口归属（唯一来源）：
 
-- `memex_core::runner::{RunnerSession, RunnerPlugin, PolicyPlugin, PolicyAction, RunnerStartArgs}`
-- `memex_core::gatekeeper::GatekeeperPlugin`
-- `memex_core::memory::MemoryPlugin`
+- `memex_core::api::{RunnerSession, RunnerPlugin, PolicyPlugin, PolicyAction, RunnerStartArgs}`
+- `memex_core::api::{RunnerSession, RunnerPlugin, PolicyPlugin, PolicyAction, RunnerStartArgs}`
+- `memex_core::api::GatekeeperPlugin`
+- `memex_core::api::MemoryPlugin`
 
 ## memex-plugins（实现层 / 适配器）
 

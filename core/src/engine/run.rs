@@ -7,7 +7,6 @@ use crate::error::RunnerError;
 use crate::events_out::write_wrapper_event;
 use crate::memory::{CandidateExtractConfig, InjectConfig, InjectPlacement};
 use crate::runner::{RunnerResult, RunnerStartArgs};
-use crate::state::types::RuntimePhase;
 use crate::tool_event::WrapperEvent;
 
 use super::post::{post_run, PostRunContext};
@@ -30,28 +29,11 @@ where
         capture_bytes,
         silent,
         events_out_tx,
-        state_manager,
         policy,
         memory,
         gatekeeper,
         wrapper_start_data,
     } = args;
-
-    let mut state_handle: Option<crate::state::StateManagerHandle> = None;
-    let mut state_session_id: Option<String> = None;
-    if let Some(manager) = state_manager.as_ref() {
-        let handle = manager.handle();
-        let session_id = handle
-            .create_session(Some(run_id.clone()))
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-        handle
-            .transition_phase(&session_id, RuntimePhase::Initializing)
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-        state_handle = Some(handle);
-        state_session_id = Some(session_id);
-    }
 
     let inject_cfg: InjectConfig = InjectConfig {
         placement: match cfg.prompt_inject.placement {
@@ -77,7 +59,9 @@ where
     };
 
     let (memory_search_limit, memory_min_score) = match &cfg.memory.provider {
-        crate::config::MemoryProvider::Service(svc_cfg) => (svc_cfg.search_limit, svc_cfg.min_score),
+        crate::config::MemoryProvider::Service(svc_cfg) => {
+            (svc_cfg.search_limit, svc_cfg.min_score)
+        }
     };
 
     let pre_ctx = EngineContext {
@@ -85,9 +69,6 @@ where
         inject_cfg: &inject_cfg,
         memory: memory.as_deref(),
         gatekeeper: gatekeeper.as_ref(),
-        state_handle: state_handle.as_ref(),
-        state_manager: state_manager.as_ref(),
-        session_id: state_session_id.as_deref(),
         memory_search_limit,
         memory_min_score,
     };
@@ -136,30 +117,13 @@ where
         }
     }
 
-    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
-        handle
-            .transition_phase(session_id, RuntimePhase::RunnerStarting)
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-    }
-
     // Start Session
     let session = match runner.start_session(&session_args).await {
         Ok(session) => session,
         Err(e) => {
-            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
-                let _ = handle.fail(session_id, e.to_string()).await;
-            }
             return Err(RunnerError::Spawn(e.to_string()));
         }
     };
-
-    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
-        handle
-            .transition_phase(session_id, RuntimePhase::RunnerRunning)
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-    }
 
     let run_input = RunSessionInput {
         session,
@@ -169,17 +133,12 @@ where
         capture_bytes,
         events_out_tx: events_out_tx.clone(),
         silent,
-        state_manager: state_manager.clone(),
-        state_session_id: state_session_id.clone(),
     };
 
     // Run Session (runner runtime is in core; caller may provide a custom session loop, e.g. TUI).
     let run_result = match run_session_fn(run_input).await {
         Ok(r) => r,
         Err(e) => {
-            if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
-                let _ = handle.fail(session_id, e.to_string()).await;
-            }
             // Best-effort: still emit buffered wrapper events so the run has a trace,
             // using the configured run_id (no session_id discovered).
             for mut ev in pending_wrapper_events {
@@ -210,21 +169,11 @@ where
         cand_cfg: &cand_cfg,
         memory: memory.as_deref(),
         gatekeeper: gatekeeper.as_ref(),
-        state_handle: state_handle.as_ref(),
-        state_manager: state_manager.as_ref(),
-        session_id: state_session_id.as_deref(),
         events_out: events_out_tx.as_ref(),
     };
 
     let (run_outcome, _decision) =
         post_run(&post_ctx, &run_result, &matches, shown_qa_ids, &user_query).await?;
-
-    if let (Some(handle), Some(session_id)) = (&state_handle, state_session_id.as_deref()) {
-        handle
-            .complete(session_id, run_outcome.exit_code)
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-    }
 
     let mut exit_event = WrapperEvent::new("run.end", Utc::now().to_rfc3339());
     exit_event.run_id = Some(effective_run_id);
@@ -255,7 +204,10 @@ fn build_runner_and_args(
             stream,
             stream_format,
         } => {
-            let BackendPlan { runner, session_args } = strategy
+            let BackendPlan {
+                runner,
+                session_args,
+            } = strategy
                 .plan(
                     &backend_spec,
                     base_envs,
@@ -268,7 +220,10 @@ fn build_runner_and_args(
                 .map_err(|e| RunnerError::Spawn(e.to_string()))?;
             Ok((runner, session_args))
         }
-        RunnerSpec::Passthrough { runner, session_args } => Ok((runner, session_args)),
+        RunnerSpec::Passthrough {
+            runner,
+            session_args,
+        } => Ok((runner, session_args)),
     }
 }
 
@@ -284,7 +239,9 @@ mod tests {
     use crate::config::AppConfig;
     use crate::gatekeeper::{GatekeeperDecision, GatekeeperPlugin, InjectItem, SearchMatch};
     use crate::memory::MemoryPlugin;
-    use crate::runner::{RunOutcome, RunnerPlugin, RunnerResult, RunnerSession, RunnerStartArgs, Signal};
+    use crate::runner::{
+        RunOutcome, RunnerPlugin, RunnerResult, RunnerSession, RunnerStartArgs, Signal,
+    };
 
     use super::*;
 
@@ -296,7 +253,10 @@ mod tests {
 
     impl CaptureBackendStrategy {
         fn new(last_prompt: Arc<Mutex<Option<String>>>, runner: Arc<dyn RunnerPlugin>) -> Self {
-            Self { last_prompt, runner }
+            Self {
+                last_prompt,
+                runner,
+            }
         }
     }
 
@@ -337,7 +297,10 @@ mod tests {
             self.0.name()
         }
 
-        async fn start_session(&self, args: &RunnerStartArgs) -> anyhow::Result<Box<dyn RunnerSession>> {
+        async fn start_session(
+            &self,
+            args: &RunnerStartArgs,
+        ) -> anyhow::Result<Box<dyn RunnerSession>> {
             self.0.start_session(args).await
         }
     }
@@ -350,7 +313,10 @@ mod tests {
             "dummy-runner"
         }
 
-        async fn start_session(&self, _args: &RunnerStartArgs) -> anyhow::Result<Box<dyn RunnerSession>> {
+        async fn start_session(
+            &self,
+            _args: &RunnerStartArgs,
+        ) -> anyhow::Result<Box<dyn RunnerSession>> {
             Ok(Box::new(DummySession {
                 stdin: Some(tokio::io::sink()),
                 stdout: Some(tokio::io::empty()),
@@ -404,7 +370,10 @@ mod tests {
             "dummy-memory"
         }
 
-        async fn search(&self, _payload: crate::memory::models::QASearchPayload) -> anyhow::Result<Vec<SearchMatch>> {
+        async fn search(
+            &self,
+            _payload: crate::memory::models::QASearchPayload,
+        ) -> anyhow::Result<Vec<SearchMatch>> {
             Ok(vec![SearchMatch {
                 qa_id: "qa-1".to_string(),
                 project_id: None,
@@ -426,15 +395,24 @@ mod tests {
             }])
         }
 
-        async fn record_hit(&self, _payload: crate::memory::models::QAHitsPayload) -> anyhow::Result<()> {
+        async fn record_hit(
+            &self,
+            _payload: crate::memory::models::QAHitsPayload,
+        ) -> anyhow::Result<()> {
             Ok(())
         }
 
-        async fn record_candidate(&self, _payload: crate::memory::models::QACandidatePayload) -> anyhow::Result<()> {
+        async fn record_candidate(
+            &self,
+            _payload: crate::memory::models::QACandidatePayload,
+        ) -> anyhow::Result<()> {
             Ok(())
         }
 
-        async fn record_validation(&self, _payload: crate::memory::models::QAValidationPayload) -> anyhow::Result<()> {
+        async fn record_validation(
+            &self,
+            _payload: crate::memory::models::QAValidationPayload,
+        ) -> anyhow::Result<()> {
             Ok(())
         }
     }
@@ -503,7 +481,6 @@ mod tests {
                 capture_bytes: 128,
                 silent: true,
                 events_out_tx: None,
-                state_manager: None,
                 policy: None,
                 memory,
                 gatekeeper,

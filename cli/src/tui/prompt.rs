@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use memex_core::error::RunnerError;
+use memex_core::api::RunnerError;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use super::events::{InputReader, InputEvent};
+use super::events::{InputEvent, InputReader};
 use super::ui;
 use super::{InputMode, PromptAction, TuiApp};
 
@@ -19,7 +19,7 @@ pub async fn prompt_in_tui(
         tokio::time::interval(Duration::from_millis(app.config.update_interval_ms.max(16)));
 
     let input_area = terminal.get_frame().area();
-    
+
     loop {
         tokio::select! {
             Some(event) = input_rx.recv() => {

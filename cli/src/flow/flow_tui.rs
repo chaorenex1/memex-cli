@@ -1,23 +1,20 @@
 use std::sync::Arc;
 
-use memex_core::config::TuiConfig;
+use core_api::TuiConfig;
+use core_api::{
+    EventsOutTx, MemoryPlugin, PolicyPlugin, RunSessionArgs, RunSessionInput, RunnerError,
+    RunnerEvent, RunnerResult,
+};
 use memex_core::api as core_api;
-use memex_core::engine::RunSessionInput;
-use memex_core::error::RunnerError;
-use memex_core::events_out::EventsOutTx;
-use memex_core::memory::MemoryPlugin;
-use memex_core::runner::{run_session, PolicyPlugin, RunnerResult, RunSessionArgs};
-use memex_core::state::types::{RuntimePhase, StateEvent};
-use memex_core::state::StateManager;
-use memex_core::runner::RunnerEvent;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::commands::cli::{Args, RunArgs};
-use crate::plan::build_runner_spec;
+use crate::task_level::infer_task_level;
 use crate::tui::{restore_terminal, setup_terminal, TuiApp};
+use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
 
 // Unified error handling for TUI
 fn handle_tui_error(tui_app: &mut TuiApp, error: &str, severity: &str) {
@@ -49,8 +46,7 @@ impl TuiRuntime {
 pub async fn run_tui_flow(
     args: &Args,
     run_args: Option<&RunArgs>,
-    cfg: &mut memex_core::config::AppConfig,
-    state_manager: Option<Arc<StateManager>>,
+    cfg: &mut core_api::AppConfig,
     events_out_tx: Option<EventsOutTx>,
     run_id: String,
     _recover_run_id: Option<String>,
@@ -59,16 +55,16 @@ pub async fn run_tui_flow(
     _stream_silent: bool,
     policy: Option<Arc<dyn PolicyPlugin>>,
     memory: Option<Arc<dyn MemoryPlugin>>,
-    gatekeeper: Arc<dyn memex_core::gatekeeper::GatekeeperPlugin>,
+    gatekeeper: Arc<dyn core_api::GatekeeperPlugin>,
 ) -> Result<i32, RunnerError> {
     let mut tui = TuiRuntime::new(&cfg.tui, run_id.clone())?;
     let shared_policy = policy;
     let shared_memory = memory;
     let shared_gatekeeper = gatekeeper;
-    
+
     tracing::debug!("TUI: Starting interactive loop");
-    
-    use crate::tui::events::{InputReader, InputEvent};
+
+    use crate::tui::events::{InputEvent, InputReader};
     use crate::tui::ui;
     use std::time::Duration;
 
@@ -78,17 +74,23 @@ pub async fn run_tui_flow(
     'main_loop: loop {
         // Create input reader and tick for this query cycle
         let (input_reader, mut input_rx) = InputReader::start();
-        let mut tick = tokio::time::interval(Duration::from_millis(tui.app.config.update_interval_ms.max(16)));
-        
+        let mut tick = tokio::time::interval(Duration::from_millis(
+            tui.app.config.update_interval_ms.max(16),
+        ));
+
         // Reset app state for new query
         tui.app.reset_for_new_query();
         tui.app.set_prompt_mode();
-        
+
         // Initial render
         tui.app.maybe_hide_splash();
         let input_area = tui.terminal.get_frame().area();
         if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
-            handle_tui_error(&mut tui.app, &format!("Initial render failed: {}", e), "WARN");
+            handle_tui_error(
+                &mut tui.app,
+                &format!("Initial render failed: {}", e),
+                "WARN",
+            );
         }
 
         // Phase 1: Get user input
@@ -133,7 +135,7 @@ pub async fn run_tui_flow(
         };
 
         tracing::debug!("TUI: Input received: {:?}", user_input);
-        
+
         // Phase 2: Prepare for execution
         tui.app.input_buffer.clear();
         tui.app.input_cursor = 0;
@@ -145,20 +147,14 @@ pub async fn run_tui_flow(
         // Generate a new run_id for each query
         let query_run_id = Uuid::new_v4().to_string();
         tui.app.run_id = query_run_id.clone();
-        
+
         let query_policy = shared_policy.clone();
         let query_memory = shared_memory.clone();
         let query_gatekeeper = shared_gatekeeper.clone();
 
-        let (runner_spec, start_data) = build_runner_spec(
-            args,
-            run_args,
-            cfg,
-            None,
-            stream_enabled,
-            stream_format,
-        )?;
-         
+        let plan_req = build_plan_request(args, run_args, stream_enabled, stream_format);
+        let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
+
         let result = core_api::run_with_query(
             core_api::RunWithQueryArgs {
                 user_query: user_input,
@@ -168,7 +164,6 @@ pub async fn run_tui_flow(
                 capture_bytes: args.capture_bytes,
                 silent: true,
                 events_out_tx: events_out_tx.clone(),
-                state_manager: state_manager.clone(),
                 policy: query_policy,
                 memory: query_memory,
                 gatekeeper: query_gatekeeper,
@@ -194,16 +189,16 @@ pub async fn run_tui_flow(
                 tui.app.push_error_line(format!("[ERROR] {}", e));
             }
         }
-        
+
         tui.app.pending_qa = false;
         tui.app.qa_started_at = None;
-        
+
         // Phase 4: Wait for user to review results and decide what to do next
         // Create new input reader for review phase
         tracing::debug!("TUI: Waiting for user action (press 'n' for new query, 'q' to quit)");
         let (review_reader, mut review_rx) = InputReader::start();
         let mut review_tick = tokio::time::interval(Duration::from_millis(100));
-        
+
         loop {
             tokio::select! {
                 Some(event) = review_rx.recv() => {
@@ -237,22 +232,69 @@ pub async fn run_tui_flow(
                 }
                 _ = review_tick.tick() => {}
             }
-            
+
             tui.app.maybe_hide_splash();
             if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
                 tracing::warn!("Render error: {}", e);
             }
         }
-        
+
         // Stop review reader for this cycle
         review_reader.stop();
     }
 
     // Clean up terminal
     tui.restore();
-    
+
     tracing::debug!("TUI: Exiting with code {}", last_exit_code);
     Ok(last_exit_code)
+}
+
+fn build_plan_request(
+    args: &Args,
+    run_args: Option<&RunArgs>,
+    stream_enabled: bool,
+    stream_format: &str,
+) -> PlanRequest {
+    let mode = match run_args {
+        Some(ra) => {
+            let backend_kind = ra.backend_kind.map(|kind| match kind {
+                crate::commands::cli::BackendKind::Codecli => "codecli".to_string(),
+                crate::commands::cli::BackendKind::Aiservice => "aiservice".to_string(),
+            });
+
+            let task_level = match ra.task_level {
+                crate::commands::cli::TaskLevel::Auto => {
+                    let prompt_for_level = ra
+                        .prompt
+                        .clone()
+                        .unwrap_or_else(|| args.codecli_args.join(" "));
+                    format!("{:?}", infer_task_level(&prompt_for_level))
+                }
+                lv => format!("{lv:?}"),
+            };
+
+            PlanMode::Backend {
+                backend_spec: ra.backend.clone(),
+                backend_kind,
+                env_file: ra.env_file.clone(),
+                env: ra.env.clone(),
+                model: ra.model.clone(),
+                task_level: Some(task_level),
+            }
+        }
+        None => PlanMode::Legacy {
+            cmd: args.codecli_bin.clone(),
+            args: args.codecli_args.clone(),
+        },
+    };
+
+    PlanRequest {
+        mode,
+        resume_id: None,
+        stream: stream_enabled,
+        stream_format: stream_format.to_string(),
+    }
 }
 
 // Modified session runner that reuses the existing input reader
@@ -263,7 +305,7 @@ async fn run_tui_session_continuing(
     tick: &mut tokio::time::Interval,
 ) -> Result<RunnerResult, RunnerError> {
     use crate::tui::ui;
-    
+
     tracing::debug!("TUI session (continuing): Starting");
     tui.app.pending_qa = false;
     tui.app.qa_started_at = None;
@@ -274,55 +316,12 @@ async fn run_tui_session_continuing(
         handle_tui_error(app, error, "ERROR");
     };
 
-    // Set up state monitoring
-    if let Some(manager) = input.state_manager.as_ref() {
-        let mut state_rx = manager.subscribe();
-        let session_id = input.state_session_id.clone();
-        let tui_tx_state = tui_tx.clone();
-        tokio::spawn(async move {
-            let mut phase = RuntimePhase::Initializing;
-            let mut memory_hits = 0usize;
-            let mut tool_events = 0usize;
-            loop {
-                match state_rx.recv().await {
-                    Ok(event) => {
-                        let Some(id) = event.session_id() else { continue; };
-                        if session_id.as_deref() != Some(id) {
-                            continue;
-                        }
-                        match event {
-                            StateEvent::SessionStateChanged { new_phase, .. } => {
-                                phase = new_phase;
-                            }
-                            StateEvent::ToolEventReceived { event_count, .. } => {
-                                tool_events = tool_events.saturating_add(event_count);
-                            }
-                            StateEvent::MemoryHit { hit_count, .. } => {
-                                memory_hits = hit_count;
-                            }
-                            _ => {}
-                        }
-                        let _ = tui_tx_state.send(RunnerEvent::StateUpdate {
-                            phase,
-                            memory_hits,
-                            tool_events,
-                        });
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                }
-            }
-        });
-    }
-
     // Start run task
     let events_out_tx_run = input.events_out_tx.clone();
-    let state_manager_run = input.state_manager.clone();
-    let state_session_id_run = input.state_session_id.clone();
     let run_id = input.run_id.clone();
     let silent = input.silent;
     let mut run_task = tokio::spawn(async move {
-        run_session(RunSessionArgs {
+        core_api::run_session(RunSessionArgs {
             session: input.session,
             control: &input.control,
             policy: input.policy,
@@ -331,8 +330,6 @@ async fn run_tui_session_continuing(
             event_tx: Some(tui_tx),
             run_id: &run_id,
             silent,
-            state_manager: state_manager_run,
-            session_id: state_session_id_run,
         })
         .await
     });
@@ -355,9 +352,9 @@ async fn run_tui_session_continuing(
                         use crossterm::event::KeyCode;
                         match key.code {
                             // Allow only control/navigation keys, ignore character input
-                            KeyCode::Char('q') | KeyCode::Char('c') | KeyCode::Tab | 
+                            KeyCode::Char('q') | KeyCode::Char('c') | KeyCode::Tab |
                             KeyCode::Char('1') | KeyCode::Char('2') | KeyCode::Char('3') |
-                            KeyCode::Char('k') | KeyCode::Char('j') | KeyCode::Char('u') | 
+                            KeyCode::Char('k') | KeyCode::Char('j') | KeyCode::Char('u') |
                             KeyCode::Char('d') | KeyCode::Char('g') | KeyCode::Char('G') |
                             KeyCode::Char('p') | KeyCode::Char(' ') |
                             KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown => {
@@ -377,7 +374,7 @@ async fn run_tui_session_continuing(
                 }
             }
             res = &mut run_task => {
-                let res = match res {
+                let res: Result<RunnerResult, RunnerError> = match res {
                     Ok(inner) => inner,
                     Err(e) => {
                         let err_msg = format!("Task panic: {}", e);
@@ -386,7 +383,7 @@ async fn run_tui_session_continuing(
                         continue; // Show error, keep UI running for user to see
                     }
                 };
-                
+
                 // Process result
                 run_result = Some(match res {
                     Ok(result) => {
@@ -414,7 +411,7 @@ async fn run_tui_session_continuing(
             tracing::warn!("Render error (non-fatal): {}", e);
             handle_tui_error(&mut tui.app, &format!("Render error: {}", e), "WARN");
         }
-        
+
         // Exit conditions:
         // 1. User explicitly requested exit (q or Ctrl+C)
         // 2. Run completed AND user pressed a key to exit
@@ -422,7 +419,7 @@ async fn run_tui_session_continuing(
             tracing::debug!("TUI: User requested exit");
             break;
         }
-        
+
         // If run is done but user hasn't explicitly exited, keep showing the UI
         // This allows users to review results/errors before exiting
         if tui.app.is_done() && run_result.is_some() {

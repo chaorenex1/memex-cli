@@ -2,15 +2,17 @@ use clap::Parser;
 mod app;
 mod commands;
 mod flow;
-mod plan;
+mod task_level;
 mod tui;
-mod utils;
 use commands::cli;
-use memex_core::context::AppContext;
-use memex_core::error;
-use memex_core::replay;
-use memex_core::state::{StateEvent, StateManager};
+use core_api::{AppContext, CliError, RunnerError};
+use memex_core::api as core_api;
+use memex_plugins::services::PluginServicesFactory;
 use std::sync::Arc;
+use tracing_appender::{
+    non_blocking,
+    rolling::{RollingFileAppender, Rotation},
+};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -31,64 +33,16 @@ async fn main() {
     std::process::exit(exit);
 }
 
-async fn real_main() -> Result<i32, error::CliError> {
+async fn real_main() -> Result<i32, CliError> {
     let mut args = cli::Args::parse();
-    let cfg =
-        memex_core::config::load_default().map_err(|e| error::CliError::Config(e.to_string()))?;
-    init_tracing(&cfg.logging).map_err(error::CliError::Command)?;
+    let cfg = core_api::load_default().map_err(|e| CliError::Config(e.to_string()))?;
+    init_tracing(&cfg.logging).map_err(CliError::Command)?;
 
-    let env_state_enabled = std::env::var("MEMEX_ENABLE_STATE_MGMT")
-        .ok()
-        .map(|v| v.eq_ignore_ascii_case("true"));
-    let state_enabled = env_state_enabled.unwrap_or(cfg.state_management.enabled);
-
-    let state_manager = if state_enabled {
-        Some(Arc::new(StateManager::new()))
-    } else {
-        None
-    };
-    if let Some(manager) = state_manager.as_ref() {
-        let mut event_rx = manager.subscribe();
-        tokio::spawn(async move {
-            while let Ok(event) = event_rx.recv().await {
-                match event {
-                    StateEvent::SessionCreated { session_id, .. } => {
-                        tracing::debug!("Session created: {}", session_id);
-                    }
-                    StateEvent::SessionStateChanged {
-                        session_id,
-                        new_phase,
-                        ..
-                    } => {
-                        tracing::debug!("Session {} -> {:?}", session_id, new_phase);
-                    }
-                    StateEvent::SessionCompleted {
-                        session_id,
-                        exit_code,
-                        duration_ms,
-                        ..
-                    } => {
-                        tracing::info!(
-                            "Session {} completed (exit={}, {}ms)",
-                            session_id,
-                            exit_code,
-                            duration_ms
-                        );
-                    }
-                    StateEvent::SessionFailed {
-                        session_id, error, ..
-                    } => {
-                        tracing::error!("Session {} failed: {}", session_id, error);
-                    }
-                    _ => {}
-                }
-            }
-        });
-    }
-
-    let ctx = AppContext::new(cfg, state_manager)
+    let services_factory: Option<Arc<dyn core_api::ServicesFactory>> =
+        Some(Arc::new(PluginServicesFactory::default()));
+    let ctx = AppContext::new(cfg, services_factory)
         .await
-        .map_err(error::CliError::Runner)?;
+        .map_err(CliError::Runner)?;
 
     let cmd = args.command.take();
 
@@ -100,46 +54,42 @@ async fn real_main() -> Result<i32, error::CliError> {
     Ok(exit)
 }
 
-fn exit_code_for_error(e: &error::CliError) -> i32 {
+fn exit_code_for_error(e: &CliError) -> i32 {
     // 0: success
     // 11: config error
     // 20: runner start / IO error
     // 40: policy deny (usually returned as a normal exit code, not as an error)
     // 50: internal/uncategorized
     match e {
-        error::CliError::Config(_) => 11,
-        error::CliError::Runner(re) => match re {
-            error::RunnerError::Config(_) => 11,
-            error::RunnerError::Spawn(_) => 20,
-            error::RunnerError::StreamIo { .. } => 20,
-            error::RunnerError::Plugin(_) => 50,
+        CliError::Config(_) => 11,
+        CliError::Runner(re) => match re {
+            RunnerError::Config(_) => 11,
+            RunnerError::Spawn(_) => 20,
+            RunnerError::StreamIo { .. } => 20,
+            RunnerError::Plugin(_) => 50,
         },
-        error::CliError::Io(_) => 20,
-        error::CliError::Command(_) => 20,
-        error::CliError::Replay(_) => 50,
-        error::CliError::Anyhow(_) => 50,
+        CliError::Io(_) => 20,
+        CliError::Command(_) => 20,
+        CliError::Replay(_) => 50,
+        CliError::Anyhow(_) => 50,
     }
 }
 
-async fn dispatch(
-    cmd: cli::Commands,
-    args: cli::Args,
-    ctx: AppContext,
-) -> Result<i32, error::CliError> {
+async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Result<i32, CliError> {
     match cmd {
         cli::Commands::Run(run_args) => {
             let exit = app::run_app_with_config(args, Some(run_args), None, &ctx).await?;
             Ok(exit)
         }
         cli::Commands::Replay(replay_args) => {
-            let core_args = replay::ReplayArgs {
+            let core_args = core_api::ReplayArgs {
                 events: replay_args.events,
                 run_id: replay_args.run_id,
                 format: replay_args.format,
                 set: replay_args.set,
                 rerun_gatekeeper: replay_args.rerun_gatekeeper,
             };
-            replay::replay_cmd(core_args).map_err(error::CliError::Replay)?;
+            core_api::replay_cmd(core_args).map_err(CliError::Replay)?;
             Ok(0)
         }
         cli::Commands::Resume(resume_args) => {
@@ -151,7 +101,7 @@ async fn dispatch(
     }
 }
 
-fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), String> {
+fn init_tracing(logging: &core_api::LoggingConfig) -> Result<(), String> {
     if !logging.enabled {
         return Ok(());
     }
@@ -176,8 +126,14 @@ fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), Strin
 
         std::fs::create_dir_all(&dir).map_err(|e| format!("create log dir failed: {e}"))?;
         let file_name = format!("memex-cli.{}.log", std::process::id());
-        let appender = tracing_appender::rolling::never(dir, file_name);
-        let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+        // let appender = tracing_appender::rolling::daily(dir, file_name);
+        let file_appender = RollingFileAppender::builder()
+            .rotation(Rotation::DAILY)
+            .max_log_files(3)
+            .filename_prefix(file_name)
+            .build(dir)
+            .unwrap();
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
         let _ = LOG_GUARD.set(guard);
         maybe_writer = Some(non_blocking);
     }
@@ -186,11 +142,11 @@ fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), Strin
         return Err("logging disabled for both console and file".to_string());
     }
 
-    let console_layer = logging.console.then(|| {
-        tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stderr)
-            .with_ansi(atty::is(atty::Stream::Stderr))
-    });
+    // let console_layer = logging.console.then(|| {
+    //     tracing_subscriber::fmt::layer()
+    //         .with_writer(std::io::stderr)
+    //         .with_ansi(atty::is(atty::Stream::Stderr))
+    // });
 
     let file_layer = maybe_writer.map(|w| {
         tracing_subscriber::fmt::layer()
@@ -200,7 +156,7 @@ fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), Strin
 
     tracing_subscriber::registry()
         .with(filter)
-        .with(console_layer)
+        // .with(console_layer)
         .with(file_layer)
         .init();
 

@@ -37,9 +37,6 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub gatekeeper: GatekeeperConfig,
-
-    #[serde(default)]
-    pub state_management: StateManagementConfig,
 }
 
 fn default_project_id() -> String {
@@ -65,7 +62,6 @@ impl Default for AppConfig {
             runner: RunnerConfig::default(),
             events_out: EventsOutConfig::default(),
             gatekeeper: GatekeeperConfig::default(),
-            state_management: StateManagementConfig::default(),
         }
     }
 }
@@ -693,24 +689,6 @@ impl Default for GatekeeperConfig {
     fn default() -> Self {
         Self {
             provider: default_gatekeeper_provider(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StateManagementConfig {
-    #[serde(default = "default_state_management_enabled")]
-    pub enabled: bool,
-}
-
-fn default_state_management_enabled() -> bool {
-    false
-}
-
-impl Default for StateManagementConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_state_management_enabled(),
         }
     }
 }

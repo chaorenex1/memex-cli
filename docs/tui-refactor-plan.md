@@ -97,7 +97,7 @@ let policy = factory::build_policy(&cfg);
 let gatekeeper = factory::build_gatekeeper(&cfg);
 
 // 但在 flow_tui.rs:59 - gatekeeper 参数被忽略
-_gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
+_gatekeeper: Box<dyn memex_core::api::GatekeeperPlugin>,
 ```
 
 **问题**:
@@ -125,7 +125,7 @@ pub async fn run_with_query<F, Fut>(
     stream_silent: bool,
     policy: Option<Box<dyn PolicyPlugin>>,
     memory: Option<Box<dyn MemoryPlugin>>,
-    gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
+    gatekeeper: Box<dyn memex_core::api::GatekeeperPlugin>,
     tui_runtime: Option<*mut tui::TuiRuntime>,  // ❌ 裸指针
     run_session_fn: F,  // ❌ 闭包捕获裸指针
 )

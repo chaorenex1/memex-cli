@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use memex_core::tool_event::{CompositeToolEventParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
+use memex_core::api::{CompositeToolEventParser, ToolEventRuntime, TOOL_EVENT_PREFIX};
 
 fn env_usize(name: &str, default_value: usize) -> usize {
     std::env::var(name)

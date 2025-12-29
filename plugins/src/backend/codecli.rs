@@ -3,14 +3,13 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use memex_core::backend::{BackendPlan, BackendStrategy};
-use memex_core::runner::RunnerStartArgs;
+use memex_core::api as core_api;
 
 use crate::runner::codecli::CodeCliRunnerPlugin;
 
 pub struct CodeCliBackendStrategy;
 
-impl BackendStrategy for CodeCliBackendStrategy {
+impl core_api::BackendStrategy for CodeCliBackendStrategy {
     fn name(&self) -> &str {
         "codecli"
     }
@@ -24,7 +23,7 @@ impl BackendStrategy for CodeCliBackendStrategy {
         model: Option<String>,
         stream: bool,
         stream_format: &str,
-    ) -> Result<BackendPlan> {
+    ) -> Result<core_api::BackendPlan> {
         let mut args: Vec<String> = Vec::new();
 
         let exe = backend_basename_lower(backend);
@@ -122,9 +121,9 @@ impl BackendStrategy for CodeCliBackendStrategy {
             }
         }
 
-        Ok(BackendPlan {
+        Ok(core_api::BackendPlan {
             runner: Box::new(CodeCliRunnerPlugin::new()),
-            session_args: RunnerStartArgs {
+            session_args: core_api::RunnerStartArgs {
                 cmd: backend.to_string(),
                 args,
                 envs: base_envs,
@@ -142,6 +141,7 @@ fn backend_basename_lower(backend: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use memex_core::api::BackendStrategy;
 
     fn envs() -> HashMap<String, String> {
         HashMap::new()

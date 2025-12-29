@@ -2,14 +2,13 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 
-use memex_core::backend::{BackendPlan, BackendStrategy};
-use memex_core::runner::RunnerStartArgs;
+use memex_core::api as core_api;
 
 use crate::runner::aiservice::AiServiceRunnerPlugin;
 
 pub struct AiServiceBackendStrategy;
 
-impl BackendStrategy for AiServiceBackendStrategy {
+impl core_api::BackendStrategy for AiServiceBackendStrategy {
     fn name(&self) -> &str {
         "aiservice"
     }
@@ -23,7 +22,7 @@ impl BackendStrategy for AiServiceBackendStrategy {
         model: Option<String>,
         stream: bool,
         stream_format: &str,
-    ) -> Result<BackendPlan> {
+    ) -> Result<core_api::BackendPlan> {
         if !(backend.starts_with("http://") || backend.starts_with("https://")) {
             return Err(anyhow!(
                 "aiservice backend must be a URL (http/https), got: {}",
@@ -41,9 +40,9 @@ impl BackendStrategy for AiServiceBackendStrategy {
         );
         base_envs.insert("MEMEX_STREAM_FORMAT".to_string(), stream_format.to_string());
 
-        Ok(BackendPlan {
+        Ok(core_api::BackendPlan {
             runner: Box::new(AiServiceRunnerPlugin::new()),
-            session_args: RunnerStartArgs {
+            session_args: core_api::RunnerStartArgs {
                 // cmd holds the endpoint URL for AiServiceRunnerPlugin
                 cmd: backend.to_string(),
                 // args[0] holds the prompt

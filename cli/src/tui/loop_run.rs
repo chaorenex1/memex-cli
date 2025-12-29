@@ -1,9 +1,7 @@
 use std::time::Duration;
 
-use memex_core::config::TuiConfig;
-use memex_core::error::RunnerError;
-use memex_core::runner::RunnerResult;
-use memex_core::runner::RunnerEvent;
+use core_api::{RunnerError, RunnerEvent, RunnerResult, TuiConfig};
+use memex_core::api as core_api;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -89,7 +87,11 @@ pub async fn run_with_tui_on_terminal(
             .map_err(|e| RunnerError::Spawn(e.to_string()))?;
 
         if app.is_done() || exit_requested {
-            tracing::debug!("Exiting TUI loop: is_done={}, exit_requested={}", app.is_done(), exit_requested);
+            tracing::debug!(
+                "Exiting TUI loop: is_done={}, exit_requested={}",
+                app.is_done(),
+                exit_requested
+            );
             break;
         }
     }

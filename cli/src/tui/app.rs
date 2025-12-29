@@ -1,11 +1,9 @@
 use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 
+use core_api::{RunnerEvent, ToolEvent, TuiConfig};
 use crossterm::event::KeyEvent;
-use memex_core::config::TuiConfig;
-use memex_core::runner::RunnerEvent;
-use memex_core::state::types::RuntimePhase;
-use memex_core::tool_event::ToolEvent;
+use memex_core::api as core_api;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelKind {
@@ -32,8 +30,8 @@ pub enum RunStatus {
 pub enum PromptAction {
     None,
     Submit,
-    Clear,  // Esc - clear input
-    Exit,   // Ctrl+D or Ctrl+C on empty input - exit program
+    Clear, // Esc - clear input
+    Exit,  // Ctrl+D or Ctrl+C on empty input - exit program
 }
 #[derive(Debug, Clone)]
 pub struct RawLine {
@@ -56,7 +54,6 @@ pub struct TuiApp {
     pub start: Instant,
     pub run_id: String,
     pub status: RunStatus,
-    pub runtime_phase: Option<RuntimePhase>,
     pub memory_hits: usize,
     pub tool_events_seen: usize,
     pub pending_qa: bool,
@@ -86,7 +83,6 @@ impl TuiApp {
             start: now,
             run_id,
             status: RunStatus::Running,
-            runtime_phase: None,
             memory_hits: 0,
             tool_events_seen: 0,
             pending_qa: false,
@@ -150,17 +146,6 @@ impl TuiApp {
                 self.qa_started_at = None;
             }
             RunnerEvent::StatusUpdate { .. } => {}
-            RunnerEvent::StateUpdate {
-                phase,
-                memory_hits,
-                tool_events,
-            } => {
-                self.runtime_phase = Some(phase);
-                self.memory_hits = memory_hits;
-                self.tool_events_seen = tool_events;
-                self.pending_qa = false;
-                self.qa_started_at = None;
-            }
             RunnerEvent::RunComplete { exit_code } => {
                 self.status = RunStatus::Completed(exit_code);
                 self.pending_qa = false;
@@ -209,7 +194,6 @@ impl TuiApp {
         // Reset state for new query while keeping config and structure
         self.start = Instant::now();
         self.status = RunStatus::Running;
-        self.runtime_phase = None;
         self.memory_hits = 0;
         self.tool_events_seen = 0;
         self.pending_qa = false;
@@ -249,9 +233,7 @@ impl TuiApp {
                 }
             }
             // Esc - clear input buffer
-            KeyCode::Esc => {
-                PromptAction::Clear
-            }
+            KeyCode::Esc => PromptAction::Clear,
             // Ctrl+D - exit (like bash)
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 PromptAction::Exit
@@ -329,10 +311,19 @@ impl TuiApp {
     }
 
     fn insert_char(&mut self, ch: char) {
-        tracing::debug!("insert_char: '{}' at cursor={}, buffer_len={}", ch, self.input_cursor, self.input_buffer.len());
+        tracing::debug!(
+            "insert_char: '{}' at cursor={}, buffer_len={}",
+            ch,
+            self.input_cursor,
+            self.input_buffer.len()
+        );
         self.input_buffer.insert(self.input_cursor, ch);
         self.input_cursor += ch.len_utf8();
-        tracing::debug!("after insert: buffer='{}', cursor={}", self.input_buffer, self.input_cursor);
+        tracing::debug!(
+            "after insert: buffer='{}', cursor={}",
+            self.input_buffer,
+            self.input_cursor
+        );
     }
 
     fn backspace(&mut self) {
@@ -408,9 +399,13 @@ impl TuiApp {
         self.input_cursor = 0;
     }
 
-    pub fn handle_mouse(&mut self, mouse: crossterm::event::MouseEvent, input_area: ratatui::layout::Rect) -> bool {
+    pub fn handle_mouse(
+        &mut self,
+        mouse: crossterm::event::MouseEvent,
+        input_area: ratatui::layout::Rect,
+    ) -> bool {
         use crossterm::event::{MouseButton, MouseEventKind};
-        
+
         // Only handle mouse in prompt mode
         if self.input_mode != InputMode::Prompt {
             return false;
@@ -430,7 +425,7 @@ impl TuiApp {
                 let row = (mouse.row - input_area.y - 1) as usize;
                 let col = (mouse.column - input_area.x - 2) as usize;
                 let pos = self.pos_from_row_col(row, col);
-                
+
                 // Start selection
                 self.selection_start = Some(pos);
                 self.selection_end = Some(pos);
@@ -443,7 +438,7 @@ impl TuiApp {
                     let row = (mouse.row - input_area.y - 1) as usize;
                     let col = (mouse.column - input_area.x - 2) as usize;
                     let pos = self.pos_from_row_col(row, col);
-                    
+
                     self.selection_end = Some(pos);
                     self.input_cursor = pos;
                     tracing::trace!("Mouse drag to pos={}", pos);
@@ -452,19 +447,29 @@ impl TuiApp {
             MouseEventKind::Up(MouseButton::Left) | MouseEventKind::Up(MouseButton::Right) => {
                 if self.is_selecting {
                     self.is_selecting = false;
-                    tracing::debug!("Mouse up, selection complete: {:?} to {:?}", 
-                                  self.selection_start, self.selection_end);
-                    
+                    tracing::debug!(
+                        "Mouse up, selection complete: {:?} to {:?}",
+                        self.selection_start,
+                        self.selection_end
+                    );
+
                     // Auto-copy selected text on mouse up
                     if let (Some(start), Some(end)) = (self.selection_start, self.selection_end) {
-                        let (s, e) = if start <= end { (start, end) } else { (end, start) };
+                        let (s, e) = if start <= end {
+                            (start, end)
+                        } else {
+                            (end, start)
+                        };
                         if s < e && e <= self.input_buffer.len() {
                             let selected = &self.input_buffer[s..e];
                             if !selected.is_empty() {
                                 use arboard::Clipboard;
                                 if let Ok(mut clipboard) = Clipboard::new() {
                                     let _ = clipboard.set_text(selected);
-                                    tracing::debug!("Auto-copied {} chars to clipboard", selected.len());
+                                    tracing::debug!(
+                                        "Auto-copied {} chars to clipboard",
+                                        selected.len()
+                                    );
                                 }
                             }
                         }
@@ -479,7 +484,7 @@ impl TuiApp {
     fn pos_from_row_col(&self, row: usize, col: usize) -> usize {
         let lines: Vec<&str> = self.input_buffer.split('\n').collect();
         let mut pos = 0;
-        
+
         for (i, line) in lines.iter().enumerate() {
             if i < row {
                 pos += line.len() + 1; // +1 for newline
@@ -488,7 +493,7 @@ impl TuiApp {
                 break;
             }
         }
-        
+
         pos.min(self.input_buffer.len())
     }
 

@@ -1,10 +1,9 @@
-use memex_core::config::AppConfig;
-use memex_core::stream::{StreamPlan, StreamStrategy};
+use memex_core::api as core_api;
 
 pub struct TextStreamStrategy;
 
-impl StreamStrategy for TextStreamStrategy {
-    fn apply(&self, _cfg: &mut AppConfig) -> StreamPlan {
-        StreamPlan { silent: false }
+impl core_api::StreamStrategy for TextStreamStrategy {
+    fn apply(&self, _cfg: &mut core_api::AppConfig) -> core_api::StreamPlan {
+        core_api::StreamPlan { silent: false }
     }
 }

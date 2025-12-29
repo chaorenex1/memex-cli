@@ -7,7 +7,6 @@ use crate::events_out::EventsOutTx;
 use crate::gatekeeper::GatekeeperPlugin;
 use crate::memory::MemoryPlugin;
 use crate::runner::{PolicyPlugin, RunnerPlugin, RunnerSession, RunnerStartArgs};
-use crate::state::StateManager;
 
 pub struct RunSessionInput {
     pub session: Box<dyn RunnerSession>,
@@ -17,8 +16,6 @@ pub struct RunSessionInput {
     pub capture_bytes: usize,
     pub events_out_tx: Option<EventsOutTx>,
     pub silent: bool,
-    pub state_manager: Option<Arc<StateManager>>,
-    pub state_session_id: Option<String>,
 }
 
 pub enum RunnerSpec {
@@ -45,7 +42,6 @@ pub struct RunWithQueryArgs {
     pub capture_bytes: usize,
     pub silent: bool,
     pub events_out_tx: Option<EventsOutTx>,
-    pub state_manager: Option<Arc<StateManager>>,
     pub policy: Option<Arc<dyn PolicyPlugin>>,
     pub memory: Option<Arc<dyn MemoryPlugin>>,
     pub gatekeeper: Arc<dyn GatekeeperPlugin>,

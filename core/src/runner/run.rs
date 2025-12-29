@@ -5,12 +5,11 @@ use tokio::sync::mpsc;
 use crate::config::ControlConfig;
 use crate::error::RunnerError;
 use crate::events_out::EventsOutTx;
-use crate::state::StateManager;
 
-use super::RunnerEvent;
+use super::runtime;
 use super::traits::{PolicyPlugin, RunnerSession};
 use super::types::RunnerResult;
-use super::runtime;
+use super::RunnerEvent;
 
 pub struct RunSessionArgs<'a> {
     pub session: Box<dyn RunnerSession>,
@@ -21,8 +20,6 @@ pub struct RunSessionArgs<'a> {
     pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
     pub run_id: &'a str,
     pub silent: bool,
-    pub state_manager: Option<Arc<StateManager>>,
-    pub session_id: Option<String>,
 }
 
 pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, RunnerError> {
@@ -35,8 +32,6 @@ pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, Runne
         event_tx: args.event_tx,
         run_id: args.run_id,
         silent: args.silent,
-        state_manager: args.state_manager,
-        session_id: args.session_id,
     })
     .await
 }

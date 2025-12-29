@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::error::RunnerError;
 use crate::events_out::write_wrapper_event;
 use crate::gatekeeper::{GatekeeperDecision, GatekeeperPlugin, SearchMatch};
@@ -8,8 +6,6 @@ use crate::memory::{
     CandidateExtractConfig, MemoryPlugin,
 };
 use crate::runner::{RunOutcome, RunnerResult};
-use crate::state::types::{GatekeeperDecisionSnapshot, RuntimePhase};
-use crate::state::{StateManager, StateManagerHandle};
 use crate::tool_event::{ToolEventLite, WrapperEvent};
 
 pub(crate) struct PostRunContext<'a> {
@@ -17,9 +13,6 @@ pub(crate) struct PostRunContext<'a> {
     pub cand_cfg: &'a CandidateExtractConfig,
     pub memory: Option<&'a dyn MemoryPlugin>,
     pub gatekeeper: &'a dyn GatekeeperPlugin,
-    pub state_handle: Option<&'a StateManagerHandle>,
-    pub state_manager: Option<&'a Arc<StateManager>>,
-    pub session_id: Option<&'a str>,
     pub events_out: Option<&'a crate::events_out::EventsOutTx>,
 }
 
@@ -30,13 +23,6 @@ pub(crate) async fn post_run(
     shown_qa_ids: Vec<String>,
     user_query: &str,
 ) -> Result<(RunOutcome, GatekeeperDecision), RunnerError> {
-    if let (Some(handle), Some(session_id)) = (ctx.state_handle, ctx.session_id) {
-        handle
-            .transition_phase(session_id, RuntimePhase::GatekeeperEvaluating)
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-    }
-
     let run_outcome = RunOutcome {
         exit_code: run.exit_code,
         duration_ms: run.duration_ms,
@@ -47,30 +33,9 @@ pub(crate) async fn post_run(
         used_qa_ids: crate::gatekeeper::extract_qa_refs(&run.stdout_tail),
     };
 
-    let decision = ctx
-        .gatekeeper
-        .evaluate(chrono::Utc::now(), matches, &run_outcome, &run.tool_events);
-
-    if let (Some(manager), Some(session_id)) = (ctx.state_manager, ctx.session_id) {
-        let signals = decision
-            .signals
-            .as_object()
-            .map(|map| map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-            .unwrap_or_default();
-        manager
-            .update_session(session_id, |session| {
-                session.set_gatekeeper_decision(GatekeeperDecisionSnapshot {
-                    should_write_candidate: decision.should_write_candidate,
-                    reasons: decision.reasons.clone(),
-                    signals,
-                });
-            })
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
-        manager
-            .emit_gatekeeper_decision(session_id, decision.should_write_candidate)
-            .await;
-    }
+    let decision =
+        ctx.gatekeeper
+            .evaluate(chrono::Utc::now(), matches, &run_outcome, &run.tool_events);
 
     let mut decision_event =
         WrapperEvent::new("gatekeeper.decision", chrono::Utc::now().to_rfc3339());
@@ -80,14 +45,10 @@ pub(crate) async fn post_run(
     }));
     write_wrapper_event(ctx.events_out, &decision_event).await;
 
-    if let (Some(mem), Some(handle), Some(session_id)) = (ctx.memory, ctx.state_handle, ctx.session_id)
-    {
-        handle
-            .transition_phase(session_id, RuntimePhase::MemoryPersisting)
-            .await
-            .map_err(|e| RunnerError::Spawn(e.to_string()))?;
+    if let Some(mem) = ctx.memory {
 
-        let tool_events_lite: Vec<ToolEventLite> = run.tool_events.iter().map(|e| e.into()).collect();
+        let tool_events_lite: Vec<ToolEventLite> =
+            run.tool_events.iter().map(|e| e.into()).collect();
 
         let candidate_drafts: Vec<CandidateDraft> = if decision.should_write_candidate {
             crate::memory::extract_candidates(
@@ -117,4 +78,3 @@ pub(crate) async fn post_run(
 
     Ok((run_outcome, decision))
 }
-

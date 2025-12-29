@@ -44,13 +44,7 @@ fn draw_header(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     } else {
         app.tool_events.len()
     };
-    let phase = if app.pending_qa && app.runtime_phase.is_none() {
-        "qa".to_string()
-    } else {
-        app.runtime_phase
-            .map(format_phase)
-            .unwrap_or_else(|| "unknown".to_string())
-    };
+    let phase = if app.pending_qa { "qa" } else { "run" }.to_string();
     let status_style = match app.status {
         RunStatus::Running => Style::default().fg(Color::Green),
         RunStatus::Paused => Style::default().fg(Color::Yellow),
@@ -68,11 +62,6 @@ fn draw_header(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
         Span::styled(phase, Style::default().fg(Color::Gray)),
         Span::raw("  Tools: "),
         Span::styled(tools.to_string(), Style::default().fg(Color::Gray)),
-        Span::raw("  Mem: "),
-        Span::styled(
-            app.memory_hits.to_string(),
-            Style::default().fg(Color::Gray),
-        ),
         Span::raw("  Dur: "),
         Span::styled(duration, Style::default().fg(Color::Gray)),
     ];
@@ -155,13 +144,15 @@ fn draw_input(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
                     "ERROR - Press 'n' or Enter for new query, 'q' or Ctrl+C to exit".to_string()
                 }
                 RunStatus::Completed(_) => {
-                    "COMPLETED - Press 'n' or Enter for new query, 'q' or Ctrl+C to exit".to_string()
+                    "COMPLETED - Press 'n' or Enter for new query, 'q' or Ctrl+C to exit"
+                        .to_string()
                 }
                 _ => {
                     if app.pending_qa {
                         let spinner = qa_spinner(app);
-                        let qa_elapsed =
-                            format_duration(app.qa_started_at.unwrap_or(app.start).elapsed().as_secs());
+                        let qa_elapsed = format_duration(
+                            app.qa_started_at.unwrap_or(app.start).elapsed().as_secs(),
+                        );
                         format!("QA loading... {} ({})", spinner, qa_elapsed)
                     } else {
                         "q:quit  Tab:next  1/2/3:panel  j/k:scroll  p:pause".to_string()
@@ -209,15 +200,23 @@ fn qa_spinner(app: &TuiApp) -> char {
 fn build_prompt_lines(app: &TuiApp, hint: String) -> Vec<Line<'_>> {
     let mut lines = Vec::new();
     let mut first = true;
-    
+
     // Get selection range if any
     let selection = if let (Some(start), Some(end)) = (app.selection_start, app.selection_end) {
-        let (s, e) = if start <= end { (start, end) } else { (end, start) };
-        if s < e { Some((s, e)) } else { None }
+        let (s, e) = if start <= end {
+            (start, end)
+        } else {
+            (end, start)
+        };
+        if s < e {
+            Some((s, e))
+        } else {
+            None
+        }
     } else {
         None
     };
-    
+
     for raw in app.input_buffer.split('\n') {
         if first {
             let spans = if let Some((sel_start, sel_end)) = selection {
@@ -231,14 +230,23 @@ fn build_prompt_lines(app: &TuiApp, hint: String) -> Vec<Line<'_>> {
             lines.push(Line::from(spans));
             first = false;
         } else {
-            let line_start = lines.iter()
+            let line_start = lines
+                .iter()
                 .take(lines.len())
-                .map(|_| app.input_buffer.split('\n').next().map(|s| s.len() + 1).unwrap_or(0))
+                .map(|_| {
+                    app.input_buffer
+                        .split('\n')
+                        .next()
+                        .map(|s| s.len() + 1)
+                        .unwrap_or(0)
+                })
                 .sum::<usize>();
-            
+
             let spans = if let Some((sel_start, sel_end)) = selection {
                 let mut result = vec![Span::raw("  ")];
-                result.extend(build_line_with_selection(raw, line_start, sel_start, sel_end, false));
+                result.extend(build_line_with_selection(
+                    raw, line_start, sel_start, sel_end, false,
+                ));
                 result
             } else {
                 vec![Span::raw("  "), Span::raw(raw)]
@@ -268,11 +276,11 @@ fn build_line_with_selection(
 ) -> Vec<Span<'_>> {
     let line_end = line_start + text.len();
     let mut spans = Vec::new();
-    
+
     if is_first_line {
         spans.push(Span::styled("> ", Style::default().fg(Color::Cyan)));
     }
-    
+
     // Before selection
     if sel_start > line_start {
         let before_end = sel_start.min(line_end);
@@ -282,13 +290,14 @@ fn build_line_with_selection(
             spans.push(Span::raw(&text[idx_start..idx_end]));
         }
     }
-    
+
     // Selection
     if sel_end > line_start && sel_start < line_end {
         let sel_local_start = sel_start.max(line_start) - line_start;
         let sel_local_end = sel_end.min(line_end) - line_start;
         if sel_local_end > sel_local_start {
-            let selected_text = &text[sel_local_start.min(text.len())..sel_local_end.min(text.len())];
+            let selected_text =
+                &text[sel_local_start.min(text.len())..sel_local_end.min(text.len())];
             spans.push(Span::styled(
                 selected_text,
                 Style::default()
@@ -298,7 +307,7 @@ fn build_line_with_selection(
             ));
         }
     }
-    
+
     // After selection
     if sel_end < line_end {
         let after_start = sel_end.max(line_start) - line_start;
@@ -306,7 +315,7 @@ fn build_line_with_selection(
             spans.push(Span::raw(&text[after_start..]));
         }
     }
-    
+
     spans
 }
 
@@ -436,21 +445,4 @@ fn format_duration(secs: u64) -> String {
     let m = secs / 60;
     let s = secs % 60;
     format!("{m:02}:{s:02}")
-}
-
-fn format_phase(phase: memex_core::state::types::RuntimePhase) -> String {
-    use memex_core::state::types::RuntimePhase;
-    match phase {
-        RuntimePhase::Idle => "idle",
-        RuntimePhase::Initializing => "init",
-        RuntimePhase::MemorySearch => "memory",
-        RuntimePhase::RunnerStarting => "start",
-        RuntimePhase::RunnerRunning => "run",
-        RuntimePhase::ProcessingToolEvents => "tools",
-        RuntimePhase::GatekeeperEvaluating => "gatekeeper",
-        RuntimePhase::MemoryPersisting => "persist",
-        RuntimePhase::Completed => "done",
-        RuntimePhase::Failed => "fail",
-    }
-    .to_string()
 }

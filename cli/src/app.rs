@@ -1,7 +1,5 @@
 use crate::commands::cli::{Args, RunArgs};
-use memex_core::config::MemoryProvider;
-use memex_core::context::AppContext;
-use memex_core::error::RunnerError;
+use memex_core::api as core_api;
 use memex_plugins::factory;
 
 use crate::flow::{standard, tui};
@@ -11,11 +9,10 @@ pub async fn run_app_with_config(
     args: Args,
     run_args: Option<RunArgs>,
     recover_run_id: Option<String>,
-    ctx: &AppContext,
-) -> Result<i32, RunnerError> {
+    ctx: &core_api::AppContext,
+) -> Result<i32, core_api::RunnerError> {
     let args = args;
     let mut cfg = ctx.cfg().clone();
-    let state_manager = ctx.state_manager();
 
     let force_tui = run_args.as_ref().map(|ra| ra.tui).unwrap_or(false);
 
@@ -25,11 +22,11 @@ pub async fn run_app_with_config(
         }
 
         if let Some(url) = &ra.memory_base_url {
-            let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
+            let core_api::MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
             svc_cfg.base_url = url.clone();
         }
         if let Some(key) = &ra.memory_api_key {
-            let MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
+            let core_api::MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
             svc_cfg.api_key = key.clone();
         }
     }
@@ -64,9 +61,7 @@ pub async fn run_app_with_config(
 
     let events_out_tx = ctx.events_out();
 
-    let memory = factory::build_memory(&cfg).map_err(|e| RunnerError::Spawn(e.to_string()))?;
-    let policy = factory::build_policy(&cfg);
-    let gatekeeper = factory::build_gatekeeper(&cfg);
+    let services = ctx.build_services(&cfg)?;
 
     let run_id = recover_run_id
         .clone()
@@ -78,16 +73,15 @@ pub async fn run_app_with_config(
             &args,
             run_args.as_ref(),
             &mut cfg,
-            state_manager.clone(),
             events_out_tx,
             run_id,
             recover_run_id.clone(),
             stream_enabled,
             &stream_format,
             stream_plan.silent,
-            policy,
-            memory,
-            gatekeeper,
+            services.policy,
+            services.memory,
+            services.gatekeeper,
         )
         .await;
     } else {
@@ -95,16 +89,15 @@ pub async fn run_app_with_config(
             &args,
             run_args.as_ref(),
             &mut cfg,
-            state_manager.clone(),
             events_out_tx,
             run_id,
             recover_run_id.clone(),
             stream_enabled,
             &stream_format,
             stream_plan.silent,
-            policy,
-            memory,
-            gatekeeper,
+            services.policy,
+            services.memory,
+            services.gatekeeper,
         )
         .await
     }

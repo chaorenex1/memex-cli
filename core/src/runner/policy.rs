@@ -82,14 +82,15 @@ impl PolicyEngine {
                 PolicyOutcome::Continue
             }
             PolicyAction::Deny { reason } => {
-                let _ = send_policy_decision(ctl_tx, run_id, &id, PolicyDecision::Deny, &reason).await;
+                let _ =
+                    send_policy_decision(ctl_tx, run_id, &id, PolicyDecision::Deny, &reason).await;
                 self.decided_ids.insert(id);
                 PolicyOutcome::Abort(format!("policy denial: {reason}"))
             }
             PolicyAction::Ask { prompt } => {
                 let reason = format!("policy requires approval: {prompt}");
-                let _ = send_policy_decision(ctl_tx, run_id, &id, PolicyDecision::Deny, &reason)
-                    .await;
+                let _ =
+                    send_policy_decision(ctl_tx, run_id, &id, PolicyDecision::Deny, &reason).await;
                 self.decided_ids.insert(id);
                 PolicyOutcome::Abort(reason)
             }

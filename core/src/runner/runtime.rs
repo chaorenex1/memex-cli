@@ -6,7 +6,6 @@ use tokio::sync::mpsc;
 use crate::config::ControlConfig;
 use crate::error::RunnerError;
 use crate::events_out::EventsOutTx;
-use crate::state::StateManager;
 use crate::util::RingBytes;
 
 use super::abort;
@@ -15,7 +14,6 @@ use super::io_pump;
 use super::io_pump::LineStream;
 use super::observe::ToolObserver;
 use super::policy::{PolicyEngine, PolicyOutcome};
-use super::state_report::StateReporter;
 use super::traits::{PolicyPlugin, RunnerSession};
 use super::types::RunnerResult;
 use super::RunnerEvent;
@@ -29,11 +27,11 @@ pub struct RunSessionRuntimeInput<'a> {
     pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
     pub run_id: &'a str,
     pub silent: bool,
-    pub state_manager: Option<Arc<StateManager>>,
-    pub session_id: Option<String>,
 }
 
-pub async fn run_session_runtime(input: RunSessionRuntimeInput<'_>) -> Result<RunnerResult, RunnerError> {
+pub async fn run_session_runtime(
+    input: RunSessionRuntimeInput<'_>,
+) -> Result<RunnerResult, RunnerError> {
     let RunSessionRuntimeInput {
         mut session,
         control_cfg,
@@ -43,13 +41,10 @@ pub async fn run_session_runtime(input: RunSessionRuntimeInput<'_>) -> Result<Ru
         event_tx: tui_tx,
         run_id,
         silent,
-        state_manager,
-        session_id,
     } = input;
     let _span = tracing::info_span!(
         "core.run_session",
         run_id = %run_id,
-        session_id = %session_id.as_deref().unwrap_or(""),
         capture_bytes = capture_bytes,
         silent = silent,
         fail_mode = %control_cfg.fail_mode,
@@ -88,7 +83,6 @@ pub async fn run_session_runtime(input: RunSessionRuntimeInput<'_>) -> Result<Ru
     let mut tick = tokio::time::interval(Duration::from_millis(control_cfg.tick_interval_ms));
 
     let mut tool_observer = ToolObserver::new(events_out.clone(), run_id);
-    let mut state_reporter = StateReporter::new(state_manager, session_id);
     let mut policy_engine = PolicyEngine::new(fail_closed, decision_timeout);
 
     let (exit_status, abort_reason) = {
@@ -132,7 +126,6 @@ pub async fn run_session_runtime(input: RunSessionRuntimeInput<'_>) -> Result<Ru
 
                         let tool_event = tool_observer.observe_line(&tap.line).await;
                         if let Some(ev) = tool_event {
-                            state_reporter.on_tool_event();
                             if let Some(tx) = &tui_tx {
                                 let _ = tx.send(RunnerEvent::ToolEvent(Box::new(ev.clone())));
                             }
@@ -184,7 +177,6 @@ pub async fn run_session_runtime(input: RunSessionRuntimeInput<'_>) -> Result<Ru
         )
         .await;
         let duration_ms = started_at.elapsed().as_millis() as u64;
-        state_reporter.set_runner_duration_ms(duration_ms).await;
         if let Some(tx) = &tui_tx {
             let _ = tx.send(RunnerEvent::Error(reason.clone()));
             let _ = tx.send(RunnerEvent::RunComplete { exit_code: 40 });
@@ -221,7 +213,6 @@ pub async fn run_session_runtime(input: RunSessionRuntimeInput<'_>) -> Result<Ru
         .to_string();
 
     let duration_ms = started_at.elapsed().as_millis() as u64;
-    state_reporter.set_runner_duration_ms(duration_ms).await;
 
     if let Some(tx) = &tui_tx {
         let _ = tx.send(RunnerEvent::RunComplete { exit_code });

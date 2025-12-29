@@ -53,9 +53,7 @@
 - **位置**: `cli/src/**/*.rs`
 - **表现**: cli层直接依赖core内部模块20+处
   ```rust
-  use memex_core::tool_event::ToolEvent;
-  use memex_core::state::types::RuntimePhase;
-  use memex_core::runner::RunnerResult;
+  use memex_core::api::{RuntimePhase, RunnerResult, ToolEvent};
   // ... 大量内部依赖
   ```
 - **危害**:

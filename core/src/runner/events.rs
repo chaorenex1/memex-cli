@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use crate::state::types::RuntimePhase;
 use crate::tool_event::ToolEvent;
 
 /// Frontend-facing events emitted by the runner loop.
@@ -17,14 +16,8 @@ pub enum RunnerEvent {
         tokens: u64,
         duration: Duration,
     },
-    StateUpdate {
-        phase: RuntimePhase,
-        memory_hits: usize,
-        tool_events: usize,
-    },
     RunComplete {
         exit_code: i32,
     },
     Error(String),
 }
-
