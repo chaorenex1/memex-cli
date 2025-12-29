@@ -222,7 +222,7 @@ pub async fn run_session_runtime(
                                             policy.as_deref(),
                                             &ctl_tx,
                                             run_id,
-                                            tool_ev,
+                                            tool_ev.as_ref(),
                                         )
                                         .await
                                         {

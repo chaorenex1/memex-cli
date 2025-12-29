@@ -11,7 +11,6 @@ use memex_core::api as core_api;
 use memex_plugins::services::PluginServicesFactory;
 use std::sync::Arc;
 use tracing_appender::{
-    non_blocking,
     rolling::{RollingFileAppender, Rotation},
 };
 use tracing_subscriber::layer::SubscriberExt;
@@ -45,7 +44,7 @@ async fn real_main() -> Result<i32, CliError> {
     init_tracing(&cfg.logging).map_err(CliError::Command)?;
 
     let services_factory: Option<Arc<dyn core_api::ServicesFactory>> =
-        Some(Arc::new(PluginServicesFactory::default()));
+        Some(Arc::new(PluginServicesFactory));
     let ctx = AppContext::new(cfg, services_factory)
         .await
         .map_err(CliError::Runner)?;

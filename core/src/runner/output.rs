@@ -29,7 +29,7 @@ fn audit_preview(s: &str) -> String {
 #[derive(Debug, Clone)]
 pub enum OutputEvent {
     RawLine { stream: LineStream, text: String },
-    ToolEvent(ToolEvent),
+    ToolEvent(Box<ToolEvent>),
 }
 
 #[derive(Debug, Clone)]
@@ -264,7 +264,7 @@ impl StreamParser for JsonlParser {
                             event_type = %ev.event_type
                         );
                     }
-                    out.push(OutputEvent::ToolEvent(ev));
+                    out.push(OutputEvent::ToolEvent(Box::new(ev)));
                 }
                 None => {
                     // Not a ToolEvent or known stream-json shape. Skip silently.
@@ -332,7 +332,7 @@ impl OutputSink for TuiSink {
                         let _ = self.tx.send(RunnerEvent::AssistantOutput(text));
                     }
                 } else {
-                    let _ = self.tx.send(RunnerEvent::ToolEvent(Box::new(tool_ev)));
+                    let _ = self.tx.send(RunnerEvent::ToolEvent(tool_ev));
                 }
             }
             OutputEvent::RawLine { stream, text } => match stream {
@@ -414,7 +414,7 @@ impl OutputSink for StdioSink {
                 LineStream::Stderr => Self::write_line(&mut self.stderr, &text).await,
             },
             OutputEvent::ToolEvent(ev) => {
-                let s = serde_json::to_string(&ev).unwrap_or_else(|_| "{}".to_string());
+                let s = serde_json::to_string(ev.as_ref()).unwrap_or_else(|_| "{}".to_string());
                 tracing::debug!(
                     target: "memex.stdout_audit",
                     kind = "tool_event",

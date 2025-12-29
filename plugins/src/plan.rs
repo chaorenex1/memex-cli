@@ -2,7 +2,6 @@
 use std::collections::HashMap;
 
 use memex_core::api as core_api;
-use serde_json::de;
 
 use crate::factory;
 

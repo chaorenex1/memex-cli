@@ -23,6 +23,13 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
     ) -> Result<core_api::BackendPlan> {
         let mut args: Vec<String> = Vec::new();
         let envs = base_envs;
+        tracing::info!(
+            "Preparing CodeCLI backend plan with backend: {}, model: {:?}, resume_id: {:?}, stream_format: {}",
+            backend,
+            model,
+            resume_id,
+            stream_format
+        );
 
         // 解析可执行文件完整路径
         let exe_path = resolve_executable_path(backend)?;

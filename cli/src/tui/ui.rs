@@ -60,7 +60,7 @@ fn draw_header(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
         RunStatus::Error(_) => Style::default().fg(Color::Red),
     };
 
-    let mut line_parts = vec![
+    let line_parts = vec![
         Span::styled("Memex CLI", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("  Run: "),
         Span::styled(run_id.to_string(), Style::default().fg(Color::Gray)),

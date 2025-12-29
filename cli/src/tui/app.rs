@@ -187,9 +187,9 @@ impl TuiApp {
         false
     }
 
-    pub fn is_done(&self) -> bool {
-        matches!(self.status, RunStatus::Completed(_) | RunStatus::Error(_))
-    }
+    // pub fn is_done(&self) -> bool {
+    //     matches!(self.status, RunStatus::Completed(_) | RunStatus::Error(_))
+    // }
 
     pub fn reset_for_new_query(&mut self) {
         // Reset state for new query while keeping config and structure

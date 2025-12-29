@@ -36,7 +36,7 @@ pub async fn run_app_with_config(
         }
     }
 
-    let mut stream_format = run_args
+    let stream_format = run_args
         .as_ref()
         .map(|ra| ra.stream_format.clone())
         .unwrap_or_else(|| "text".to_string());
