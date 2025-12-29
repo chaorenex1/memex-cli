@@ -1,4 +1,4 @@
-﻿use crate::tool_event::model::{ToolEvent};
+use crate::tool_event::model::ToolEvent;
 use crate::tool_event::{PrefixedJsonlParser, StreamJsonToolEventParser, ToolEventParser};
 
 /// Stateful, best-effort parser for mixed stdout/stderr logs.

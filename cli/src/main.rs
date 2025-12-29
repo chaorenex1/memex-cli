@@ -10,9 +10,7 @@ use core_api::{AppContext, CliError, RunnerError};
 use memex_core::api as core_api;
 use memex_plugins::services::PluginServicesFactory;
 use std::sync::Arc;
-use tracing_appender::{
-    rolling::{RollingFileAppender, Rotation},
-};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
