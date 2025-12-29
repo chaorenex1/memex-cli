@@ -13,11 +13,7 @@ pub async fn abort_sequence(
     reason: &str,
     code: Option<String>,
 ) {
-    let abort = PolicyAbortCmd::new(
-        run_id.to_string(),
-        reason.to_string(),
-        code,
-    );
+    let abort = PolicyAbortCmd::new(run_id.to_string(), reason.to_string(), code);
     let _ = ctl_tx.send(serde_json::to_value(abort).unwrap()).await;
     tokio::time::sleep(std::time::Duration::from_millis(abort_grace_ms)).await;
     let _ = session.signal(Signal::Kill).await;

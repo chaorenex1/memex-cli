@@ -19,12 +19,7 @@ pub async fn run_standard_flow(
     gatekeeper: Arc<dyn core_api::GatekeeperPlugin>,
 ) -> Result<i32, core_api::RunnerError> {
     let user_query = resolve_user_query(args, run_args)?;
-    let plan_req = build_plan_request(
-        args,
-        run_args,
-        recover_run_id,
-        stream_format,
-    );
+    let plan_req = build_plan_request(args, run_args, recover_run_id, stream_format);
     let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
 
     core_api::run_with_query(

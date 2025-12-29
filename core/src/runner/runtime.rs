@@ -12,7 +12,10 @@ use crate::util::RingBytes;
 use super::abort;
 use super::control;
 use super::io_pump;
-use super::output::{maybe_apply_policy, JsonlParser, OutputEvent, OutputSink, StdioSink, StreamParser, TextParser, TuiSink};
+use super::output::{
+    maybe_apply_policy, JsonlParser, OutputEvent, OutputSink, StdioSink, StreamParser, TextParser,
+    TuiSink,
+};
 use super::policy::{PolicyEngine, PolicyOutcome};
 use super::traits::{PolicyPlugin, RunnerSession};
 use super::types::RunnerResult;
@@ -379,7 +382,10 @@ enum ParserKind {
 }
 
 impl ParserKind {
-    async fn parse(&mut self, tap: &io_pump::LineTap) -> Result<Vec<OutputEvent>, super::output::ParseError> {
+    async fn parse(
+        &mut self,
+        tap: &io_pump::LineTap,
+    ) -> Result<Vec<OutputEvent>, super::output::ParseError> {
         match self {
             ParserKind::Text(p) => p.parse(tap).await,
             ParserKind::Jsonl(p) => p.parse(tap).await,

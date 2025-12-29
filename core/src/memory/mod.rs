@@ -14,7 +14,7 @@ pub use r#trait::MemoryPlugin;
 pub use adapters::parse_search_matches;
 pub use client::MemoryClient;
 pub use models::{
-    QACandidatePayload, QAHitsPayload, QAReferencePayload, QASearchPayload, QAValidationPayload,
+    QACandidatePayload, QAHitsPayload, QASearchPayload, QAValidationPayload,
 };
 
 pub use candidates::extract_candidates;

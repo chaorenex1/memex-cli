@@ -10,5 +10,4 @@ mod cmd;
 mod types;
 
 pub use cmd::replay_cmd;
-pub use parse::parse_events_file;
 pub use types::ReplayArgs;

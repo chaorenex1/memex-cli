@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use anyhow::Result;
+use std::collections::HashMap;
 
 use memex_core::api as core_api;
 
@@ -27,7 +27,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         // 解析可执行文件完整路径
         let exe_path = resolve_executable_path(backend)?;
         tracing::info!("Resolved executable path: {}", exe_path);
-        
+
         // 提取命令类型用于判断参数格式（codex/claude/gemini）
         let cmd_type = extract_command_type(backend);
 
@@ -126,7 +126,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
 }
 
 /// 解析可执行文件的完整路径
-/// 
+///
 /// 优先级：
 /// 1. 如果是绝对路径且存在，直接使用
 /// 2. 从 npm 全局工具目录查找（支持 nvm/nvm-windows）
@@ -134,21 +134,21 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
 /// 4. 失败时返回错误
 fn resolve_executable_path(backend: &str) -> Result<String> {
     use std::path::Path;
-    
+
     let backend_path = Path::new(backend);
-    
+
     // 1. 如果是绝对路径且存在，直接使用
     if backend_path.is_absolute() && backend_path.exists() {
         tracing::debug!("Using absolute path: {}", backend);
         return Ok(backend.to_string());
     }
-    
+
     // 2. 提取命令名（去掉扩展名）
     let cmd_name = backend_path
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or(backend);
-    
+
     // 3. 从 npm 全局工具中查找
     match find_in_npm_global(cmd_name) {
         Ok(path) => {
@@ -159,7 +159,7 @@ fn resolve_executable_path(backend: &str) -> Result<String> {
             tracing::debug!("npm global search failed: {}", e);
         }
     }
-    
+
     // 4. 在系统 PATH 中查找
     match find_in_system_path(cmd_name) {
         Some(path) => {
@@ -170,19 +170,20 @@ fn resolve_executable_path(backend: &str) -> Result<String> {
             tracing::debug!("Not found in system PATH: {}", cmd_name);
         }
     }
-    
+
     // 5. 都找不到时返回错误
     Err(anyhow::anyhow!(
         "Executable '{}' not found. Please ensure it's installed (e.g., npm install -g {}) \
         or provide the full path.",
-        cmd_name, cmd_name
+        cmd_name,
+        cmd_name
     ))
 }
 
 /// 提取命令类型（用于判断参数格式）
 fn extract_command_type(backend: &str) -> String {
     use std::path::Path;
-    
+
     Path::new(backend)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -194,7 +195,7 @@ fn extract_command_type(backend: &str) -> String {
 fn find_in_npm_global(cmd: &str) -> Result<String> {
     // 获取 npm 全局 bin 目录
     let npm_bin = get_npm_global_bin()?;
-    
+
     #[cfg(target_os = "windows")]
     {
         // Windows: 只查找 .exe 二进制文件
@@ -204,7 +205,7 @@ fn find_in_npm_global(cmd: &str) -> Result<String> {
             return Ok(path.to_string_lossy().to_string());
         }
     }
-    
+
     #[cfg(not(target_os = "windows"))]
     {
         // Unix: 查找没有扩展名的可执行文件
@@ -214,16 +215,19 @@ fn find_in_npm_global(cmd: &str) -> Result<String> {
             return Ok(path.to_string_lossy().to_string());
         }
     }
-    
-    Err(anyhow::anyhow!("Binary executable '{}' not found in npm global", cmd))
+
+    Err(anyhow::anyhow!(
+        "Binary executable '{}' not found in npm global",
+        cmd
+    ))
 }
 
 /// 在系统 PATH 中查找命令（仅二进制可执行文件）
 fn find_in_system_path(cmd: &str) -> Option<String> {
     use std::env;
-    
+
     let path_env = env::var_os("PATH")?;
-    
+
     for dir in env::split_paths(&path_env) {
         #[cfg(target_os = "windows")]
         {
@@ -233,7 +237,7 @@ fn find_in_system_path(cmd: &str) -> Option<String> {
                 return Some(candidate.to_string_lossy().to_string());
             }
         }
-        
+
         #[cfg(not(target_os = "windows"))]
         {
             // Unix: 查找没有扩展名的可执行文件
@@ -243,7 +247,7 @@ fn find_in_system_path(cmd: &str) -> Option<String> {
             }
         }
     }
-    
+
     None
 }
 
@@ -251,7 +255,7 @@ fn find_in_system_path(cmd: &str) -> Option<String> {
 #[cfg(not(target_os = "windows"))]
 fn is_executable(path: &std::path::Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
-    
+
     if let Ok(metadata) = std::fs::metadata(path) {
         let permissions = metadata.permissions();
         // 检查是否有任何执行权限位（用户/组/其他）
@@ -263,9 +267,9 @@ fn is_executable(path: &std::path::Path) -> bool {
 
 /// 获取 npm 全局 bin 目录
 fn get_npm_global_bin() -> Result<std::path::PathBuf> {
-    use std::process::Command;
     use std::env;
-    
+    use std::process::Command;
+
     // 策略1: 检查 NVM 环境变量（nvm-windows 和 nvm 都支持）
     // NVM_BIN 指向当前激活版本的 bin 目录
     if let Ok(nvm_bin) = env::var("NVM_BIN") {
@@ -277,7 +281,7 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
             tracing::debug!("NVM_BIN exists but not a directory: {}", nvm_bin);
         }
     }
-    
+
     // 策略2: 检查 NVM_SYMLINK (nvm-windows)
     #[cfg(target_os = "windows")]
     if let Ok(nvm_symlink) = env::var("NVM_SYMLINK") {
@@ -287,7 +291,7 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
             return Ok(path);
         }
     }
-    
+
     // 策略3: 调用 npm bin -g
     let output = Command::new("npm")
         .args(["bin", "-g"])
@@ -305,8 +309,13 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
                 Err(e)
             }
         })
-        .map_err(|e| anyhow::anyhow!("Failed to execute npm: {}. Make sure npm is installed and in PATH.", e))?;
-    
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to execute npm: {}. Make sure npm is installed and in PATH.",
+                e
+            )
+        })?;
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -317,16 +326,16 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
             stderr.trim()
         ));
     }
-    
+
     let path_str = String::from_utf8(output.stdout)
         .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in npm output: {}", e))?
         .trim()
         .to_string();
-    
+
     if path_str.is_empty() {
         return Err(anyhow::anyhow!("npm bin -g returned empty output"));
     }
-    
+
     let path = std::path::PathBuf::from(&path_str);
     if !path.exists() {
         return Err(anyhow::anyhow!(
@@ -334,13 +343,14 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
             path_str
         ));
     }
-    
+
     if !path.is_dir() {
         return Err(anyhow::anyhow!(
             "npm global bin path is not a directory: {}",
             path_str
         ));
     }
-    
+
     tracing::info!("npm global bin directory: {}", path.display());
-    Ok(path)}
+    Ok(path)
+}

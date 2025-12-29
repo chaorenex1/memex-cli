@@ -1,11 +1,11 @@
 use super::{RunOutcome, RunnerPlugin, RunnerSession, RunnerStartArgs, Signal};
 use anyhow::Result;
 use async_trait::async_trait;
+use std::pin::Pin;
 use std::process::Stdio;
+use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::process::{Child, Command};
-use std::pin::Pin;
-use std::task::{Context, Poll};
 
 pub struct CodeCliRunnerPlugin {}
 
@@ -84,33 +84,37 @@ impl<R: AsyncRead + Unpin> AsyncRead for DebugReadWrapper<R> {
     ) -> Poll<std::io::Result<()>> {
         let before = buf.filled().len();
         let result = Pin::new(&mut self.inner).poll_read(cx, buf);
-        
+
         if let Poll::Ready(Ok(())) = &result {
             let after = buf.filled().len();
             let read_len = after - before;
-            
+
             if read_len > 0 {
                 let data = &buf.filled()[before..after];
                 self.buffer.extend_from_slice(data);
-                
+
                 // 每次读取都记录
                 if let Ok(s) = std::str::from_utf8(data) {
                     tracing::debug!("[{}] Read {} bytes: {:?}", self.label, read_len, s);
                 } else {
                     tracing::debug!("[{}] Read {} bytes (binary)", self.label, read_len);
                 }
-                
+
                 // 定期输出累积的内容
                 if self.buffer.len() > 1024 {
                     if let Ok(s) = std::str::from_utf8(&self.buffer) {
-                        tracing::debug!("[{}] Accumulated output ({} bytes):\n{}", 
-                            self.label, self.buffer.len(), s);
+                        tracing::debug!(
+                            "[{}] Accumulated output ({} bytes):\n{}",
+                            self.label,
+                            self.buffer.len(),
+                            s
+                        );
                     }
                     self.buffer.clear();
                 }
             }
         }
-        
+
         result
     }
 }
@@ -119,8 +123,12 @@ impl<R> Drop for DebugReadWrapper<R> {
     fn drop(&mut self) {
         if !self.buffer.is_empty() {
             if let Ok(s) = std::str::from_utf8(&self.buffer) {
-                tracing::debug!("[{}] Final output ({} bytes):\n{}", 
-                    self.label, self.buffer.len(), s);
+                tracing::debug!(
+                    "[{}] Final output ({} bytes):\n{}",
+                    self.label,
+                    self.buffer.len(),
+                    s
+                );
             }
         }
         tracing::debug!("[{}] Stream closed", self.label);
@@ -137,13 +145,10 @@ impl RunnerSession for CodeCliRunnerSession {
     }
 
     fn stdout(&mut self) -> Option<Box<dyn AsyncRead + Unpin + Send>> {
-        self.child
-            .stdout
-            .take()
-            .map(|s| {
-                tracing::debug!("Wrapping stdout with debug wrapper");
-                Box::new(DebugReadWrapper::new(s, "STDOUT")) as Box<dyn AsyncRead + Unpin + Send>
-            })
+        self.child.stdout.take().map(|s| {
+            tracing::debug!("Wrapping stdout with debug wrapper");
+            Box::new(DebugReadWrapper::new(s, "STDOUT")) as Box<dyn AsyncRead + Unpin + Send>
+        })
     }
 
     fn stderr(&mut self) -> Option<Box<dyn AsyncRead + Unpin + Send>> {

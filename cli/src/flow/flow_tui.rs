@@ -2,9 +2,7 @@
 use std::sync::Arc;
 
 use core_api::TuiConfig;
-use core_api::{
-    EventsOutTx, MemoryPlugin, PolicyPlugin, RunSessionArgs, RunnerError, RunnerEvent,
-};
+use core_api::{EventsOutTx, MemoryPlugin, PolicyPlugin, RunSessionArgs, RunnerError, RunnerEvent};
 use memex_core::api as core_api;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -274,11 +272,7 @@ pub async fn run_tui_flow(
     Ok(last_exit_code)
 }
 
-fn build_plan_request(
-    args: &Args,
-    run_args: Option<&RunArgs>,
-    stream_format: &str,
-) -> PlanRequest {
+fn build_plan_request(args: &Args, run_args: Option<&RunArgs>, stream_format: &str) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
             let backend_kind = ra.backend_kind.map(|kind| match kind {

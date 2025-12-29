@@ -4,38 +4,6 @@ use serde_json::Value;
 
 use crate::tool_event::ToolEvent;
 
-pub fn extract_assistant_text_from_stream_json_line(line: &str) -> Option<String> {
-    let s = line.trim();
-    if !(s.starts_with('{') && s.ends_with('}')) {
-        return None;
-    }
-
-    let v: Value = serde_json::from_str(s).ok()?;
-
-    // Claude stream-json: assistant message with content items like:
-    // {"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
-    if v.get("type").and_then(|x| x.as_str()) == Some("assistant") {
-        let items = v
-            .get("message")
-            .and_then(|m| m.get("content"))
-            .and_then(|c| c.as_array())?;
-
-        for item in items {
-            let ty = item.get("type").and_then(|x| x.as_str()).unwrap_or("");
-            if ty != "text" && ty != "output_text" {
-                continue;
-            }
-            if let Some(t) = item.get("text").and_then(|x| x.as_str()) {
-                if !t.is_empty() {
-                    return Some(t.to_string());
-                }
-            }
-        }
-    }
-
-    None
-}
-
 /// Parses "stream-json" style lines emitted by external CLIs (e.g. codex/claude/gemini).
 ///
 /// It is intentionally best-effort:
@@ -400,7 +368,9 @@ impl StreamJsonToolEventParser {
                         action: Some("exec".to_string()),
                         args: Value::Null,
                         ok,
-                        output: output.or_else(|| Some(serde_json::json!({ "exit_code": exit_code, "status": status }))),
+                        output: output.or_else(|| {
+                            Some(serde_json::json!({ "exit_code": exit_code, "status": status }))
+                        }),
                         error,
                         rationale: None,
                     });

@@ -12,12 +12,7 @@ pub enum RunnerEvent {
     AssistantOutput(String),
     RawStdout(String),
     RawStderr(String),
-    StatusUpdate {
-        tokens: u64,
-        duration: Duration,
-    },
-    RunComplete {
-        exit_code: i32,
-    },
+    StatusUpdate { tokens: u64, duration: Duration },
+    RunComplete { exit_code: i32 },
     Error(String),
 }

@@ -27,4 +27,3 @@ pub fn extract_run_id_from_value(v: &Value) -> Option<String> {
 
     None
 }
-

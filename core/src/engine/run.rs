@@ -109,11 +109,7 @@ where
     // Build runner + session args (backend plan runs after memory injection)
     let (runner, session_args) = build_runner_and_args(runner, merged_query)?;
 
-    tracing::info!(
-        "Starting runner '{}' for run_id={}",
-        runner.name(),
-        run_id
-    );
+    tracing::info!("Starting runner '{}' for run_id={}", runner.name(), run_id);
 
     // Always include the actual backend invocation in wrapper events for replay/observability.
     if let Some(last) = pending_wrapper_events.last_mut() {
