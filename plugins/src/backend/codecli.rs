@@ -302,7 +302,7 @@ fn get_npm_global_bin() -> Result<std::path::PathBuf> {
     // 策略3: 调用 npm bin -g
     let output = Command::new("npm")
         .args(["bin", "-g"])
-        .output()?;
+        .output().map_err(|e| anyhow::anyhow!("Failed to execute 'npm bin -g': {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
