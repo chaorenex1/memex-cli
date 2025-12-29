@@ -1,3 +1,4 @@
+//! ServicesFactory 实现：从配置构建并统一提供 policy/memory/gatekeeper 等 services，供 CLI 复用。
 use memex_core::api::{AppConfig, RunnerError, Services, ServicesFactory};
 
 use crate::factory;

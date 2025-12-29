@@ -1,3 +1,4 @@
+//! 标准（非 TUI）执行流：解析用户输入、调用 plugins planner 生成 `RunnerSpec`，再通过 core 引擎执行一次会话。
 use memex_core::api as core_api;
 use std::sync::Arc;
 
@@ -53,6 +54,7 @@ pub async fn run_standard_flow(
                 event_tx: None,
                 run_id: &input.run_id,
                 silent: input.silent,
+                abort_rx: None,
             })
             .await
         },

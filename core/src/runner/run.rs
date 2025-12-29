@@ -1,3 +1,4 @@
+//! Runner 运行入口：把 `RunnerSession`、控制配置、policy 与事件通道组装成 runtime input 并执行。
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
@@ -20,6 +21,7 @@ pub struct RunSessionArgs<'a> {
     pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
     pub run_id: &'a str,
     pub silent: bool,
+    pub abort_rx: Option<mpsc::Receiver<String>>,
 }
 
 pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, RunnerError> {
@@ -32,6 +34,7 @@ pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, Runne
         event_tx: args.event_tx,
         run_id: args.run_id,
         silent: args.silent,
+        abort_rx: args.abort_rx,
     })
     .await
 }

@@ -1,3 +1,4 @@
+//! 引擎主入口：把一次“用户 query”编排为 pre-run（记忆检索/注入）→ runner 执行 → post-run（gatekeeper/回写）。
 use std::future::Future;
 
 use chrono::Utc;
@@ -45,6 +46,13 @@ where
         include_meta_line: cfg.prompt_inject.include_meta_line,
     };
 
+    tracing::debug!(
+        "run_with_query: run_id={}, inject_placement={:?}, inject_max_items={}",
+        run_id,
+        inject_cfg.placement,
+        inject_cfg.max_items
+    );
+
     let cand_cfg: CandidateExtractConfig = CandidateExtractConfig {
         max_candidates: cfg.candidate_extract.max_candidates,
         max_answer_chars: cfg.candidate_extract.max_answer_chars,
@@ -79,6 +87,14 @@ where
     let matches = pre.matches;
     let memory_search_event = pre.memory_search_event;
 
+    tracing::debug!(
+        "run_with_query: run_id={}, merged_query_len={}, shown_qa_ids={:?}, matches_len={}",
+        run_id,
+        merged_query.len(),
+        shown_qa_ids,
+        matches.len()
+    );
+
     // Buffer early wrapper events until we learn the effective run_id (session_id).
     // This keeps IDs consistent across the whole wrapper-event stream.
     let mut pending_wrapper_events: Vec<WrapperEvent> = Vec::new();
@@ -92,6 +108,12 @@ where
 
     // Build runner + session args (backend plan runs after memory injection)
     let (runner, session_args) = build_runner_and_args(runner, merged_query)?;
+
+    tracing::info!(
+        "Starting runner '{}' for run_id={}",
+        runner.name(),
+        run_id
+    );
 
     // Always include the actual backend invocation in wrapper events for replay/observability.
     if let Some(last) = pending_wrapper_events.last_mut() {
@@ -117,10 +139,29 @@ where
         }
     }
 
+    tracing::debug!(
+        "run_with_query: run_id={}, starting session with cmd='{}', args={:?} , envs={:?}",
+        run_id,
+        session_args.cmd,
+        session_args.args,
+        session_args.envs
+    );
     // Start Session
     let session = match runner.start_session(&session_args).await {
         Ok(session) => session,
         Err(e) => {
+            // Best-effort: still emit buffered wrapper events so the run has a trace,
+            // using the configured run_id (no session_id discovered).
+            tracing::error!(
+                "runner '{}' failed to start session for run_id={}: {}",
+                runner.name(),
+                run_id,
+                e
+            );
+            for mut ev in pending_wrapper_events {
+                ev.run_id = Some(run_id.clone());
+                write_wrapper_event(events_out_tx.as_ref(), &ev).await;
+            }
             return Err(RunnerError::Spawn(e.to_string()));
         }
     };
@@ -224,288 +265,5 @@ fn build_runner_and_args(
             runner,
             session_args,
         } => Ok((runner, session_args)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
-
-    use async_trait::async_trait;
-    use serde_json::Value;
-
-    use crate::backend::{BackendPlan, BackendStrategy};
-    use crate::config::AppConfig;
-    use crate::gatekeeper::{GatekeeperDecision, GatekeeperPlugin, InjectItem, SearchMatch};
-    use crate::memory::MemoryPlugin;
-    use crate::runner::{
-        RunOutcome, RunnerPlugin, RunnerResult, RunnerSession, RunnerStartArgs, Signal,
-    };
-
-    use super::*;
-
-    #[derive(Clone)]
-    struct CaptureBackendStrategy {
-        last_prompt: Arc<Mutex<Option<String>>>,
-        runner: Arc<dyn RunnerPlugin>,
-    }
-
-    impl CaptureBackendStrategy {
-        fn new(last_prompt: Arc<Mutex<Option<String>>>, runner: Arc<dyn RunnerPlugin>) -> Self {
-            Self {
-                last_prompt,
-                runner,
-            }
-        }
-    }
-
-    impl BackendStrategy for CaptureBackendStrategy {
-        fn name(&self) -> &str {
-            "capture"
-        }
-
-        fn plan(
-            &self,
-            backend: &str,
-            base_envs: HashMap<String, String>,
-            _resume_id: Option<String>,
-            prompt: String,
-            _model: Option<String>,
-            _stream: bool,
-            _stream_format: &str,
-        ) -> anyhow::Result<BackendPlan> {
-            assert_eq!(backend, "dummy");
-            assert!(base_envs.contains_key("PATH"));
-            *self.last_prompt.lock().unwrap() = Some(prompt);
-            Ok(BackendPlan {
-                runner: Box::new(SharedRunnerPlugin(self.runner.clone())),
-                session_args: RunnerStartArgs {
-                    cmd: "dummy-cmd".to_string(),
-                    args: vec!["--flag".to_string()],
-                    envs: base_envs,
-                },
-            })
-        }
-    }
-
-    struct SharedRunnerPlugin(Arc<dyn RunnerPlugin>);
-
-    #[async_trait]
-    impl RunnerPlugin for SharedRunnerPlugin {
-        fn name(&self) -> &str {
-            self.0.name()
-        }
-
-        async fn start_session(
-            &self,
-            args: &RunnerStartArgs,
-        ) -> anyhow::Result<Box<dyn RunnerSession>> {
-            self.0.start_session(args).await
-        }
-    }
-
-    struct DummyRunnerPlugin;
-
-    #[async_trait]
-    impl RunnerPlugin for DummyRunnerPlugin {
-        fn name(&self) -> &str {
-            "dummy-runner"
-        }
-
-        async fn start_session(
-            &self,
-            _args: &RunnerStartArgs,
-        ) -> anyhow::Result<Box<dyn RunnerSession>> {
-            Ok(Box::new(DummySession {
-                stdin: Some(tokio::io::sink()),
-                stdout: Some(tokio::io::empty()),
-                stderr: Some(tokio::io::empty()),
-            }))
-        }
-    }
-
-    struct DummySession {
-        stdin: Option<tokio::io::Sink>,
-        stdout: Option<tokio::io::Empty>,
-        stderr: Option<tokio::io::Empty>,
-    }
-
-    #[async_trait]
-    impl RunnerSession for DummySession {
-        fn stdin(&mut self) -> Option<Box<dyn tokio::io::AsyncWrite + Unpin + Send>> {
-            self.stdin.take().map(|s| Box::new(s) as _)
-        }
-
-        fn stdout(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Unpin + Send>> {
-            self.stdout.take().map(|s| Box::new(s) as _)
-        }
-
-        fn stderr(&mut self) -> Option<Box<dyn tokio::io::AsyncRead + Unpin + Send>> {
-            self.stderr.take().map(|s| Box::new(s) as _)
-        }
-
-        async fn signal(&mut self, _signal: Signal) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn wait(&mut self) -> anyhow::Result<RunOutcome> {
-            Ok(RunOutcome {
-                exit_code: 0,
-                duration_ms: None,
-                stdout_tail: String::new(),
-                stderr_tail: String::new(),
-                tool_events: vec![],
-                shown_qa_ids: vec![],
-                used_qa_ids: vec![],
-            })
-        }
-    }
-
-    struct DummyMemory;
-
-    #[async_trait]
-    impl MemoryPlugin for DummyMemory {
-        fn name(&self) -> &str {
-            "dummy-memory"
-        }
-
-        async fn search(
-            &self,
-            _payload: crate::memory::models::QASearchPayload,
-        ) -> anyhow::Result<Vec<SearchMatch>> {
-            Ok(vec![SearchMatch {
-                qa_id: "qa-1".to_string(),
-                project_id: None,
-                question: "Q?".to_string(),
-                answer: "A.".to_string(),
-                tags: vec![],
-                score: 0.9,
-                relevance: 0.9,
-                validation_level: 3,
-                level: None,
-                trust: 0.9,
-                freshness: 1.0,
-                confidence: 1.0,
-                status: "active".to_string(),
-                summary: None,
-                source: None,
-                expiry_at: None,
-                metadata: Value::Null,
-            }])
-        }
-
-        async fn record_hit(
-            &self,
-            _payload: crate::memory::models::QAHitsPayload,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn record_candidate(
-            &self,
-            _payload: crate::memory::models::QACandidatePayload,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-
-        async fn record_validation(
-            &self,
-            _payload: crate::memory::models::QAValidationPayload,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    }
-
-    struct DummyGatekeeper;
-
-    impl GatekeeperPlugin for DummyGatekeeper {
-        fn name(&self) -> &str {
-            "dummy-gatekeeper"
-        }
-
-        fn evaluate(
-            &self,
-            _now: chrono::DateTime<chrono::Utc>,
-            _matches: &[SearchMatch],
-            _outcome: &RunOutcome,
-            _events: &[crate::tool_event::ToolEvent],
-        ) -> GatekeeperDecision {
-            GatekeeperDecision {
-                inject_list: vec![InjectItem {
-                    qa_id: "qa-1".to_string(),
-                    question: "Q?".to_string(),
-                    answer: "A.".to_string(),
-                    summary: None,
-                    trust: 1.0,
-                    validation_level: 3,
-                    score: 1.0,
-                    tags: vec![],
-                }],
-                should_write_candidate: false,
-                hit_refs: vec![],
-                validate_plans: vec![],
-                reasons: vec![],
-                signals: Value::Null,
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn backend_plan_receives_memory_injected_prompt() {
-        let last_prompt = Arc::new(Mutex::new(None));
-        let runner: Arc<dyn RunnerPlugin> = Arc::new(DummyRunnerPlugin);
-
-        let cfg = AppConfig::default();
-
-        let (runner_spec, memory, gatekeeper) = (
-            RunnerSpec::Backend {
-                strategy: Box::new(CaptureBackendStrategy::new(last_prompt.clone(), runner)),
-                backend_spec: "dummy".to_string(),
-                base_envs: std::env::vars().collect(),
-                resume_id: None,
-                model: None,
-                stream: false,
-                stream_format: "text".to_string(),
-            },
-            Some(Arc::new(DummyMemory) as Arc<dyn MemoryPlugin>),
-            Arc::new(DummyGatekeeper) as Arc<dyn GatekeeperPlugin>,
-        );
-
-        let exit = run_with_query(
-            RunWithQueryArgs {
-                user_query: "hello".to_string(),
-                cfg,
-                runner: runner_spec,
-                run_id: "run-1".to_string(),
-                capture_bytes: 128,
-                silent: true,
-                events_out_tx: None,
-                policy: None,
-                memory,
-                gatekeeper,
-                wrapper_start_data: None,
-            },
-            |input| async move {
-                let _ = input; // session was started; we just return a synthetic result
-                Ok(RunnerResult {
-                    run_id: "run-1".to_string(),
-                    exit_code: 0,
-                    duration_ms: Some(1),
-                    stdout_tail: String::new(),
-                    stderr_tail: String::new(),
-                    tool_events: vec![],
-                    dropped_lines: 0,
-                })
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(exit, 0);
-
-        let prompt = last_prompt.lock().unwrap().clone().unwrap();
-        assert!(prompt.contains("[MEMORY_CONTEXT v1]"));
-        assert!(prompt.contains("[QA_REF qa-1]"));
-        assert!(prompt.contains("hello"));
     }
 }

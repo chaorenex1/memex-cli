@@ -1,3 +1,4 @@
+//! 引擎 pre-run：可选记忆检索与 prompt 注入，产出合并后的 query 与 wrapper 事件（用于 replay/观测）。
 use crate::gatekeeper::{GatekeeperPlugin, SearchMatch};
 use crate::memory::{
     merge_prompt, render_memory_context, InjectConfig, MemoryPlugin, QASearchPayload,

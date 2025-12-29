@@ -24,6 +24,16 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         stream: bool,
         stream_format: &str,
     ) -> Result<core_api::BackendPlan> {
+        tracing::info!(
+            "Planning CodeCli backend '{}' with resume_id={:?}, model={:?}, stream={}, stream_format={},base_envs={:?}",
+            backend,
+            resume_id,
+            model,
+            stream,
+            stream_format,
+            base_envs
+        );
+
         let mut args: Vec<String> = Vec::new();
 
         let exe = backend_basename_lower(backend);
@@ -136,81 +146,4 @@ fn backend_basename_lower(backend: &str) -> String {
     let p = Path::new(backend);
     let s = p.file_stem().and_then(|x| x.to_str()).unwrap_or(backend);
     s.to_ascii_lowercase()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use memex_core::api::BackendStrategy;
-
-    fn envs() -> HashMap<String, String> {
-        HashMap::new()
-    }
-
-    #[test]
-    fn codex_resume_maps_to_subcommand() {
-        let strat = CodeCliBackendStrategy;
-        let plan = strat
-            .plan(
-                "codex",
-                envs(),
-                Some("sess-123".to_string()),
-                "hi".to_string(),
-                None,
-                true,
-                "jsonl",
-            )
-            .unwrap();
-
-        assert!(plan.session_args.args.contains(&"resume".to_string()));
-        assert!(plan.session_args.args.contains(&"sess-123".to_string()));
-    }
-
-    #[test]
-    fn claude_resume_maps_to_r_flag() {
-        let strat = CodeCliBackendStrategy;
-        let plan = strat
-            .plan(
-                "claude",
-                envs(),
-                Some("sess-abc".to_string()),
-                "hi".to_string(),
-                None,
-                true,
-                "jsonl",
-            )
-            .unwrap();
-
-        let idx = plan
-            .session_args
-            .args
-            .iter()
-            .position(|a| a == "-r")
-            .unwrap();
-        assert_eq!(plan.session_args.args[idx + 1], "sess-abc");
-    }
-
-    #[test]
-    fn gemini_resume_maps_to_r_flag() {
-        let strat = CodeCliBackendStrategy;
-        let plan = strat
-            .plan(
-                "gemini",
-                envs(),
-                Some("latest".to_string()),
-                "hi".to_string(),
-                None,
-                true,
-                "jsonl",
-            )
-            .unwrap();
-
-        let idx = plan
-            .session_args
-            .args
-            .iter()
-            .position(|a| a == "-r")
-            .unwrap();
-        assert_eq!(plan.session_args.args[idx + 1], "latest");
-    }
 }

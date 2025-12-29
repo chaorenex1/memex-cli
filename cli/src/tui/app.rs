@@ -1,3 +1,4 @@
+//! TUI 运行时状态容器：维护面板/滚动/选择/输出缓冲，并消费 `RunnerEvent` 与键鼠输入更新 UI 状态。
 use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
 

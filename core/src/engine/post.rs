@@ -1,3 +1,4 @@
+//! 引擎 post-run：基于 runner 输出与 tool events 进行 gatekeeper 评估，并按需向 memory 写入 hit/validation/candidate。
 use crate::error::RunnerError;
 use crate::events_out::write_wrapper_event;
 use crate::gatekeeper::{GatekeeperDecision, GatekeeperPlugin, SearchMatch};

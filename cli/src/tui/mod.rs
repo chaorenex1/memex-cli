@@ -1,7 +1,6 @@
+//! TUI 模块：终端输入读取、应用状态（TuiApp）与渲染（ui）。
 pub(crate) mod app;
 pub(crate) mod events;
-mod loop_run;
-mod prompt;
 mod terminal;
 pub(crate) mod ui;
 

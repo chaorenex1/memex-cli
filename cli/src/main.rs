@@ -1,3 +1,4 @@
+//! CLI 二进制入口：解析命令行参数、加载配置、初始化 tracing，并把控制权交给 `app`/`commands`。
 use clap::Parser;
 mod app;
 mod commands;
@@ -35,7 +36,12 @@ async fn main() {
 
 async fn real_main() -> Result<i32, CliError> {
     let mut args = cli::Args::parse();
-    let cfg = core_api::load_default().map_err(|e| CliError::Config(e.to_string()))?;
+    let mut cfg = core_api::load_default().map_err(|e| CliError::Config(e.to_string()))?;
+    if cfg.project_id.trim().is_empty() {
+        if let Ok(cwd) = std::env::current_dir() {
+            cfg.project_id = cwd.to_string_lossy().to_string();
+        }
+    }
     init_tracing(&cfg.logging).map_err(CliError::Command)?;
 
     let services_factory: Option<Arc<dyn core_api::ServicesFactory>> =
@@ -125,7 +131,7 @@ fn init_tracing(logging: &core_api::LoggingConfig) -> Result<(), String> {
         };
 
         std::fs::create_dir_all(&dir).map_err(|e| format!("create log dir failed: {e}"))?;
-        let file_name = format!("memex-cli.{}.log", std::process::id());
+        let file_name = "memex-cli.log";
         // let appender = tracing_appender::rolling::daily(dir, file_name);
         let file_appender = RollingFileAppender::builder()
             .rotation(Rotation::DAILY)
@@ -142,11 +148,11 @@ fn init_tracing(logging: &core_api::LoggingConfig) -> Result<(), String> {
         return Err("logging disabled for both console and file".to_string());
     }
 
-    // let console_layer = logging.console.then(|| {
-    //     tracing_subscriber::fmt::layer()
-    //         .with_writer(std::io::stderr)
-    //         .with_ansi(atty::is(atty::Stream::Stderr))
-    // });
+    let console_layer = logging.console.then(|| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(atty::is(atty::Stream::Stderr))
+    });
 
     let file_layer = maybe_writer.map(|w| {
         tracing_subscriber::fmt::layer()
@@ -156,7 +162,7 @@ fn init_tracing(logging: &core_api::LoggingConfig) -> Result<(), String> {
 
     tracing_subscriber::registry()
         .with(filter)
-        // .with(console_layer)
+        .with(console_layer)
         .with(file_layer)
         .init();
 

@@ -1,3 +1,4 @@
+//! TUI 输入事件源：在独立线程中 poll/read crossterm 事件，并通过 channel 发送给异步事件循环。
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,

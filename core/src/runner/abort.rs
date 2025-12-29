@@ -1,3 +1,4 @@
+//! Runner 中止协议：向控制通道发送 `control.abort`，等待 grace period 后强制 kill session。
 use serde::Serialize;
 use tokio::sync::mpsc;
 
@@ -10,11 +11,12 @@ pub async fn abort_sequence(
     run_id: &str,
     abort_grace_ms: u64,
     reason: &str,
+    code: Option<String>,
 ) {
     let abort = PolicyAbortCmd::new(
         run_id.to_string(),
         reason.to_string(),
-        Some("policy_violation".into()),
+        code,
     );
     let _ = ctl_tx.send(serde_json::to_value(abort).unwrap()).await;
     tokio::time::sleep(std::time::Duration::from_millis(abort_grace_ms)).await;

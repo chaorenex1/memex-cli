@@ -1,14 +1,15 @@
+//! TUI 执行流：单一事件循环处理输入/runner 事件/tick，并支持用户中止（abort）当前运行。
 use std::sync::Arc;
 
 use core_api::TuiConfig;
 use core_api::{
-    EventsOutTx, MemoryPlugin, PolicyPlugin, RunSessionArgs, RunSessionInput, RunnerError,
-    RunnerEvent, RunnerResult,
+    EventsOutTx, MemoryPlugin, PolicyPlugin, RunSessionArgs, RunnerError, RunnerEvent,
 };
 use memex_core::api as core_api;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
 use crate::commands::cli::{Args, RunArgs};
@@ -43,6 +44,13 @@ impl TuiRuntime {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UiMode {
+    Prompt,
+    Running,
+    Review,
+}
+
 pub async fn run_tui_flow(
     args: &Args,
     run_args: Option<&RunArgs>,
@@ -62,51 +70,105 @@ pub async fn run_tui_flow(
     let shared_memory = memory;
     let shared_gatekeeper = gatekeeper;
 
-    tracing::debug!("TUI: Starting interactive loop");
-
     use crate::tui::events::{InputEvent, InputReader};
     use crate::tui::ui;
     use std::time::Duration;
 
+    tracing::debug!("TUI: Starting unified event loop");
+
+    let (input_reader, mut input_rx) = InputReader::start();
+    let mut tick = tokio::time::interval(Duration::from_millis(
+        tui.app.config.update_interval_ms.max(16),
+    ));
+    let (runner_tx, mut runner_rx) = mpsc::unbounded_channel::<RunnerEvent>();
+    let mut mode = UiMode::Prompt;
+    let mut run_done_rx: Option<oneshot::Receiver<Result<i32, RunnerError>>> = None;
+    let mut abort_tx: Option<mpsc::Sender<String>> = None;
     let mut last_exit_code = 0;
 
-    // Main interactive loop - keep prompting until user explicitly exits
-    'main_loop: loop {
-        // Create input reader and tick for this query cycle
-        let (input_reader, mut input_rx) = InputReader::start();
-        let mut tick = tokio::time::interval(Duration::from_millis(
-            tui.app.config.update_interval_ms.max(16),
-        ));
+    tui.app.reset_for_new_query();
+    tui.app.set_prompt_mode();
 
-        // Reset app state for new query
-        tui.app.reset_for_new_query();
-        tui.app.set_prompt_mode();
-
-        // Initial render
-        tui.app.maybe_hide_splash();
-        let input_area = tui.terminal.get_frame().area();
-        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
-            handle_tui_error(
-                &mut tui.app,
-                &format!("Initial render failed: {}", e),
-                "WARN",
-            );
-        }
-
-        // Phase 1: Get user input
-        tracing::debug!("TUI: Waiting for input");
-        let user_input = loop {
-            tokio::select! {
-                Some(event) = input_rx.recv() => {
-                    match event {
+    loop {
+        tokio::select! {
+            Some(event) = input_rx.recv() => {
+                match mode {
+                    UiMode::Prompt => match event {
                         InputEvent::Key(key) => {
-                            tracing::debug!("Prompt: Received key event: {:?}", key);
                             use crate::tui::PromptAction;
                             match tui.app.handle_prompt_key(key) {
                                 PromptAction::Submit => {
-                                    let input = tui.app.input_buffer.clone();
-                                    if !input.is_empty() {
-                                        break input;
+                                    let user_input = tui.app.input_buffer.trim().to_string();
+                                    if user_input.is_empty() {
+                                        tui.app.push_error_line("[WARN] empty prompt".into());
+                                    } else {
+                                        let cfg_snapshot = cfg.clone();
+                                        let capture_bytes = args.capture_bytes;
+
+                                        // Transition to running
+                                        tui.app.input_buffer.clear();
+                                        tui.app.input_cursor = 0;
+                                        tui.app.input_mode = crate::tui::InputMode::Normal;
+                                        tui.app.pending_qa = false;
+                                        tui.app.qa_started_at = None;
+
+                                        let query_run_id = Uuid::new_v4().to_string();
+                                        tui.app.run_id = query_run_id.clone();
+                                        tui.app.status = crate::tui::RunStatus::Running;
+
+                                        let plan_req = build_plan_request(
+                                            args,
+                                            run_args,
+                                            stream_enabled,
+                                            stream_format,
+                                        );
+                                        let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
+
+                                        let query_policy = shared_policy.clone();
+                                        let query_memory = shared_memory.clone();
+                                        let query_gatekeeper = shared_gatekeeper.clone();
+                                        let events_out_tx = events_out_tx.clone();
+                                        let runner_tx = runner_tx.clone();
+                                        let (new_abort_tx, abort_rx) = mpsc::channel::<String>(1);
+                                        abort_tx = Some(new_abort_tx);
+
+                                        let (done_tx, done_rx) = oneshot::channel();
+                                        run_done_rx = Some(done_rx);
+                                        mode = UiMode::Running;
+
+                                        tokio::spawn(async move {
+                                            let res = core_api::run_with_query(
+                                                core_api::RunWithQueryArgs {
+                                                    user_query: user_input,
+                                                    cfg: cfg_snapshot,
+                                                    runner: runner_spec,
+                                                    run_id: query_run_id,
+                                                    capture_bytes,
+                                                    silent: true,
+                                                    events_out_tx,
+                                                    policy: query_policy,
+                                                    memory: query_memory,
+                                                    gatekeeper: query_gatekeeper,
+                                                    wrapper_start_data: start_data,
+                                                },
+                                                |input| async move {
+                                                    core_api::run_session(RunSessionArgs {
+                                                        session: input.session,
+                                                        control: &input.control,
+                                                        policy: input.policy,
+                                                        capture_bytes: input.capture_bytes,
+                                                        events_out: input.events_out_tx,
+                                                        event_tx: Some(runner_tx),
+                                                        run_id: &input.run_id,
+                                                        silent: input.silent,
+                                                        abort_rx: Some(abort_rx),
+                                                    })
+                                                    .await
+                                                },
+                                            )
+                                            .await;
+                                            let _ = done_tx.send(res);
+                                        });
                                     }
                                 }
                                 PromptAction::Clear => {
@@ -115,133 +177,100 @@ pub async fn run_tui_flow(
                                     tui.app.clear_selection();
                                 }
                                 PromptAction::Exit => {
-                                    tracing::debug!("TUI: User requested exit from prompt");
-                                    break 'main_loop;
+                                    break;
                                 }
                                 PromptAction::None => {}
                             }
                         }
                         InputEvent::Mouse(mouse) => {
-                            tui.app.handle_mouse(mouse, input_area);
+                            let area = tui.terminal.get_frame().area();
+                            tui.app.handle_mouse(mouse, area);
+                        }
+                    },
+                    UiMode::Running => {
+                        if let InputEvent::Key(key) = event {
+                            use crossterm::event::KeyCode;
+                            use crossterm::event::KeyModifiers;
+                            match key.code {
+                                // allow navigation / pause, but do not allow quitting mid-run
+                                KeyCode::Tab | KeyCode::Char('1') | KeyCode::Char('2') | KeyCode::Char('3') |
+                                KeyCode::Char('k') | KeyCode::Char('j') | KeyCode::Char('u') | KeyCode::Char('d') |
+                                KeyCode::Char('g') | KeyCode::Char('G') | KeyCode::Char('p') | KeyCode::Char(' ') |
+                                KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown => {
+                                    let _ = tui.app.handle_key(key);
+                                }
+                                KeyCode::Char('q') | KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                    if let Some(tx) = abort_tx.as_ref() {
+                                        let _ = tx.try_send("user requested abort".into());
+                                    }
+                                    tui.app.push_error_line("[INFO] abort requested".into());
+                                }
+                                _ => {}
+                            }
                         }
                     }
-                }
-                _ = tick.tick() => {}
-            }
-
-            if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
-                handle_tui_error(&mut tui.app, &format!("Render error: {}", e), "WARN");
-            }
-        };
-
-        tracing::debug!("TUI: Input received: {:?}", user_input);
-
-        // Phase 2: Prepare for execution
-        tui.app.input_buffer.clear();
-        tui.app.input_cursor = 0;
-        tui.app.input_mode = crate::tui::InputMode::Normal;
-        tui.app.pending_qa = true;
-        tui.app.qa_started_at = Some(std::time::Instant::now());
-
-        // Phase 3: Execute query with continuing event loop
-        // Generate a new run_id for each query
-        let query_run_id = Uuid::new_v4().to_string();
-        tui.app.run_id = query_run_id.clone();
-
-        let query_policy = shared_policy.clone();
-        let query_memory = shared_memory.clone();
-        let query_gatekeeper = shared_gatekeeper.clone();
-
-        let plan_req = build_plan_request(args, run_args, stream_enabled, stream_format);
-        let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
-
-        let result = core_api::run_with_query(
-            core_api::RunWithQueryArgs {
-                user_query: user_input,
-                cfg: cfg.clone(),
-                runner: runner_spec,
-                run_id: query_run_id,
-                capture_bytes: args.capture_bytes,
-                silent: true,
-                events_out_tx: events_out_tx.clone(),
-                policy: query_policy,
-                memory: query_memory,
-                gatekeeper: query_gatekeeper,
-                wrapper_start_data: start_data,
-            },
-            |input| run_tui_session_continuing(&mut tui, input, &mut input_rx, &mut tick),
-        )
-        .await;
-
-        input_reader.stop();
-
-        // Handle result and wait for user to review before next prompt
-        match result {
-            Ok(code) => {
-                last_exit_code = code;
-                tracing::debug!("TUI: Query completed with exit code: {}", code);
-                tui.app.status = crate::tui::RunStatus::Completed(code);
-            }
-            Err(e) => {
-                last_exit_code = 1;
-                tracing::error!("TUI: Query error: {}", e);
-                tui.app.status = crate::tui::RunStatus::Error(e.to_string());
-                tui.app.push_error_line(format!("[ERROR] {}", e));
-            }
-        }
-
-        tui.app.pending_qa = false;
-        tui.app.qa_started_at = None;
-
-        // Phase 4: Wait for user to review results and decide what to do next
-        // Create new input reader for review phase
-        tracing::debug!("TUI: Waiting for user action (press 'n' for new query, 'q' to quit)");
-        let (review_reader, mut review_rx) = InputReader::start();
-        let mut review_tick = tokio::time::interval(Duration::from_millis(100));
-
-        loop {
-            tokio::select! {
-                Some(event) = review_rx.recv() => {
-                    if let InputEvent::Key(key) = event {
-                        use crossterm::event::KeyCode;
-                        use crossterm::event::KeyModifiers;
-                        match key.code {
-                            // 'n' or Enter - start new query
-                            KeyCode::Char('n') | KeyCode::Enter => {
-                                tracing::debug!("TUI: Starting new query");
-                                break; // Break inner loop, continue main_loop
-                            }
-                            // 'q' or Ctrl+C - quit program
-                            KeyCode::Char('q') => {
-                                tracing::debug!("TUI: User requested quit");
-                                break 'main_loop;
-                            }
-                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                                tracing::debug!("TUI: User requested quit (Ctrl+C)");
-                                break 'main_loop;
-                            }
-                            // Allow navigation keys to review results
-                            _ => {
-                                if tui.app.handle_key(key) {
-                                    tracing::debug!("TUI: User requested quit via handle_key");
-                                    break 'main_loop;
+                    UiMode::Review => {
+                        if let InputEvent::Key(key) = event {
+                            use crossterm::event::KeyCode;
+                            use crossterm::event::KeyModifiers;
+                            match key.code {
+                                KeyCode::Char('n') | KeyCode::Enter => {
+                                    tui.app.reset_for_new_query();
+                                    tui.app.set_prompt_mode();
+                                    mode = UiMode::Prompt;
+                                }
+                                KeyCode::Char('q') => break,
+                                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
+                                _ => {
+                                    let _ = tui.app.handle_key(key);
                                 }
                             }
                         }
                     }
                 }
-                _ = review_tick.tick() => {}
             }
 
-            tui.app.maybe_hide_splash();
-            if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
-                tracing::warn!("Render error: {}", e);
+            Some(event) = runner_rx.recv() => {
+                tui.app.handle_event(event);
             }
+
+            res = async {
+                match run_done_rx.as_mut() {
+                    Some(rx) => rx.await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                run_done_rx = None;
+                abort_tx = None;
+                mode = UiMode::Review;
+
+                let result = match res {
+                    Ok(r) => r,
+                    Err(_) => Err(RunnerError::Spawn("run task canceled".into())),
+                };
+                match result {
+                    Ok(code) => {
+                        last_exit_code = code;
+                        tui.app.status = crate::tui::RunStatus::Completed(code);
+                    }
+                    Err(e) => {
+                        last_exit_code = 1;
+                        tui.app.status = crate::tui::RunStatus::Error(e.to_string());
+                        tui.app.push_error_line(format!("[ERROR] {}", e));
+                    }
+                }
+            }
+
+            _ = tick.tick() => {}
         }
 
-        // Stop review reader for this cycle
-        review_reader.stop();
+        tui.app.maybe_hide_splash();
+        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
+            handle_tui_error(&mut tui.app, &format!("Render error: {}", e), "WARN");
+        }
     }
+
+    input_reader.stop();
 
     // Clean up terminal
     tui.restore();
@@ -295,143 +324,4 @@ fn build_plan_request(
         stream: stream_enabled,
         stream_format: stream_format.to_string(),
     }
-}
-
-// Modified session runner that reuses the existing input reader
-async fn run_tui_session_continuing(
-    tui: &mut TuiRuntime,
-    input: RunSessionInput,
-    input_rx: &mut mpsc::UnboundedReceiver<crate::tui::events::InputEvent>,
-    tick: &mut tokio::time::Interval,
-) -> Result<RunnerResult, RunnerError> {
-    use crate::tui::ui;
-
-    tracing::debug!("TUI session (continuing): Starting");
-    tui.app.pending_qa = false;
-    tui.app.qa_started_at = None;
-    let (tui_tx, mut tui_rx) = mpsc::unbounded_channel();
-
-    // Unified error handler for execution phase
-    let handle_execution_error = |app: &mut TuiApp, error: &str| {
-        handle_tui_error(app, error, "ERROR");
-    };
-
-    // Start run task
-    let events_out_tx_run = input.events_out_tx.clone();
-    let run_id = input.run_id.clone();
-    let silent = input.silent;
-    let mut run_task = tokio::spawn(async move {
-        core_api::run_session(RunSessionArgs {
-            session: input.session,
-            control: &input.control,
-            policy: input.policy,
-            capture_bytes: input.capture_bytes,
-            events_out: events_out_tx_run,
-            event_tx: Some(tui_tx),
-            run_id: &run_id,
-            silent,
-        })
-        .await
-    });
-
-    let mut run_result: Option<Result<RunnerResult, RunnerError>> = None;
-    let mut exit_requested = false;
-
-    // Reuse the SAME event loop with the SAME input_rx!
-    tracing::debug!("TUI: Continuing event loop for execution");
-    loop {
-        tokio::select! {
-            Some(event) = tui_rx.recv() => {
-                tui.app.handle_event(event);
-            }
-            Some(event) = input_rx.recv() => {
-                use crate::tui::events::InputEvent;
-                match event {
-                    InputEvent::Key(key) => {
-                        // In execution phase, only handle control keys, ignore character input
-                        use crossterm::event::KeyCode;
-                        match key.code {
-                            // Allow only control/navigation keys, ignore character input
-                            KeyCode::Char('q') | KeyCode::Char('c') | KeyCode::Tab |
-                            KeyCode::Char('1') | KeyCode::Char('2') | KeyCode::Char('3') |
-                            KeyCode::Char('k') | KeyCode::Char('j') | KeyCode::Char('u') |
-                            KeyCode::Char('d') | KeyCode::Char('g') | KeyCode::Char('G') |
-                            KeyCode::Char('p') | KeyCode::Char(' ') |
-                            KeyCode::Up | KeyCode::Down | KeyCode::PageUp | KeyCode::PageDown => {
-                                if tui.app.handle_key(key) {
-                                    exit_requested = true;
-                                }
-                            }
-                            _ => {
-                                // Ignore other keys during execution (especially character input)
-                                tracing::trace!("Ignoring key during execution: {:?}", key);
-                            }
-                        }
-                    }
-                    InputEvent::Mouse(_) => {
-                        // Ignore mouse events during execution
-                    }
-                }
-            }
-            res = &mut run_task => {
-                let res: Result<RunnerResult, RunnerError> = match res {
-                    Ok(inner) => inner,
-                    Err(e) => {
-                        let err_msg = format!("Task panic: {}", e);
-                        handle_execution_error(&mut tui.app, &err_msg);
-                        run_result = Some(Err(RunnerError::Spawn(err_msg)));
-                        continue; // Show error, keep UI running for user to see
-                    }
-                };
-
-                // Process result
-                run_result = Some(match res {
-                    Ok(result) => {
-                        tracing::debug!("Task completed, exit_code={}", result.exit_code);
-                        if !tui.app.is_done() {
-                            tui.app.status = crate::tui::RunStatus::Completed(result.exit_code);
-                        }
-                        Ok(result)
-                    }
-                    Err(err) => {
-                        handle_execution_error(&mut tui.app, &err.to_string());
-                        // Don't break immediately - let user see the error
-                        Err(err)
-                    }
-                });
-                // After setting result, continue rendering to show completion/error state
-                // User can press 'q' or Ctrl+C to exit
-            }
-            _ = tick.tick() => {}
-        }
-
-        tui.app.maybe_hide_splash();
-        if let Err(e) = tui.terminal.draw(|f| ui::draw(f, &tui.app)) {
-            // Render errors are non-fatal, just log and continue
-            tracing::warn!("Render error (non-fatal): {}", e);
-            handle_tui_error(&mut tui.app, &format!("Render error: {}", e), "WARN");
-        }
-
-        // Exit conditions:
-        // 1. User explicitly requested exit (q or Ctrl+C)
-        // 2. Run completed AND user pressed a key to exit
-        if exit_requested {
-            tracing::debug!("TUI: User requested exit");
-            break;
-        }
-
-        // If run is done but user hasn't explicitly exited, keep showing the UI
-        // This allows users to review results/errors before exiting
-        if tui.app.is_done() && run_result.is_some() {
-            tracing::trace!("TUI: Run complete, waiting for user exit (press 'q' or Ctrl+C)");
-            // Continue loop to allow user to review and manually exit
-        }
-    }
-
-    // Return result, defaulting to error if none set
-    run_result.unwrap_or_else(|| {
-        let err = "Execution ended without result";
-        tracing::error!("{}", err);
-        Err(RunnerError::Spawn(err.to_string()))
-    })
 }

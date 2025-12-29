@@ -1,3 +1,4 @@
+//! CLI 应用装配层：合并配置覆盖、构建 services/stream，并在 Standard/TUI flow 之间分发。
 use crate::commands::cli::{Args, RunArgs};
 use memex_core::api as core_api;
 use memex_plugins::factory;
@@ -28,6 +29,11 @@ pub async fn run_app_with_config(
         if let Some(key) = &ra.memory_api_key {
             let core_api::MemoryProvider::Service(ref mut svc_cfg) = cfg.memory.provider;
             svc_cfg.api_key = key.clone();
+        }
+    }
+    if cfg.project_id.trim().is_empty() {
+        if let Ok(cwd) = std::env::current_dir() {
+            cfg.project_id = cwd.to_string_lossy().to_string();
         }
     }
 

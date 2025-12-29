@@ -1,3 +1,4 @@
+//! Runner runtime：负责 stdout/stderr 泵送、tool 事件解析、policy/timeout 控制，以及中止（abort）与退出码归一。
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -27,6 +28,7 @@ pub struct RunSessionRuntimeInput<'a> {
     pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,
     pub run_id: &'a str,
     pub silent: bool,
+    pub abort_rx: Option<mpsc::Receiver<String>>,
 }
 
 pub async fn run_session_runtime(
@@ -41,6 +43,7 @@ pub async fn run_session_runtime(
         event_tx: tui_tx,
         run_id,
         silent,
+        mut abort_rx,
     } = input;
     let _span = tracing::info_span!(
         "core.run_session",
@@ -90,7 +93,7 @@ pub async fn run_session_runtime(
         tokio::pin!(wait_fut);
 
         let mut status = None;
-        let mut reason = None;
+        let mut reason: Option<(String, i32, Option<String>)> = None;
 
         loop {
             tokio::select! {
@@ -103,11 +106,24 @@ pub async fn run_session_runtime(
                     if let Some(msg) = maybe_err {
                         tracing::error!(error.kind="control.stdin_broken", error.message=%msg);
                         if fail_closed {
-                            reason = Some("control channel broken".to_string());
+                            reason = Some(("control channel broken".to_string(), 40, None));
                             break;
                         } else {
                             tracing::warn!("control channel broken, continuing in fail-open mode");
                         }
+                    }
+                }
+
+                abort_msg = async {
+                    match abort_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    if let Some(msg) = abort_msg {
+                        tracing::warn!(error.kind="user.abort", reason=%msg);
+                        reason = Some((msg, 130, Some("user_abort".into())));
+                        break;
                     }
                 }
 
@@ -137,7 +153,7 @@ pub async fn run_session_runtime(
                                     PolicyOutcome::Continue => {}
                                     PolicyOutcome::Abort(r) => {
                                         tracing::error!(error.kind="policy.abort", reason=%r);
-                                        reason = Some(r);
+                                        reason = Some((r, 40, Some("policy_violation".into())));
                                         break;
                                     }
                                 }
@@ -156,7 +172,7 @@ pub async fn run_session_runtime(
                         PolicyOutcome::Continue => {}
                         PolicyOutcome::Abort(r) => {
                             tracing::error!(error.kind="control.decision_timeout", reason=%r);
-                            reason = Some(r);
+                            reason = Some((r, 40, Some("decision_timeout".into())));
                             break;
                         }
                     }
@@ -166,7 +182,7 @@ pub async fn run_session_runtime(
         (status, reason)
     };
 
-    if let Some(reason) = abort_reason {
+    if let Some((reason, exit_code, code)) = abort_reason {
         let effective_run_id = tool_observer.effective_run_id().unwrap_or(run_id);
         abort::abort_sequence(
             &mut session,
@@ -174,16 +190,17 @@ pub async fn run_session_runtime(
             effective_run_id,
             control_cfg.abort_grace_ms,
             &reason,
+            code,
         )
         .await;
         let duration_ms = started_at.elapsed().as_millis() as u64;
         if let Some(tx) = &tui_tx {
             let _ = tx.send(RunnerEvent::Error(reason.clone()));
-            let _ = tx.send(RunnerEvent::RunComplete { exit_code: 40 });
+            let _ = tx.send(RunnerEvent::RunComplete { exit_code });
         }
         return Ok(RunnerResult {
             run_id: effective_run_id.to_string(),
-            exit_code: 40,
+            exit_code,
             duration_ms: Some(duration_ms),
             stdout_tail: String::new(),
             stderr_tail: String::new(),

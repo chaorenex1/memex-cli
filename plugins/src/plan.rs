@@ -1,6 +1,8 @@
+//! Planner：把 CLI 参数与配置合并为可执行的 `RunnerSpec`（backend/legacy），并生成 wrapper start data。
 use std::collections::HashMap;
 
 use memex_core::api as core_api;
+use serde_json::de;
 
 use crate::factory;
 
@@ -30,7 +32,7 @@ pub fn build_runner_spec(
     cfg: &mut core_api::AppConfig,
     req: PlanRequest,
 ) -> Result<(core_api::RunnerSpec, Option<serde_json::Value>), core_api::RunnerError> {
-    let mut base_envs: HashMap<String, String> = std::env::vars().collect();
+    let mut base_envs: HashMap<String, String> = HashMap::new();
 
     match req.mode {
         PlanMode::Backend {

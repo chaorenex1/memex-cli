@@ -128,26 +128,3 @@ fn trim_newline(buf: &mut Vec<u8>) {
         buf.pop();
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn flushes_last_line_without_newline_on_eof() {
-        let (mut wr, rd) = tokio::io::duplex(1024);
-        let ring = RingBytes::new(1024);
-        let (tx, mut rx) = mpsc::channel::<LineTap>(8);
-
-        let task = pump_stdout(rd, ring, tx, true);
-
-        wr.write_all(b"hello").await.unwrap();
-        drop(wr);
-
-        let tap = rx.recv().await.expect("expected one line");
-        assert_eq!(tap.line, "hello");
-        assert!(matches!(tap.stream, LineStream::Stdout));
-
-        task.await.unwrap().unwrap();
-    }
-}

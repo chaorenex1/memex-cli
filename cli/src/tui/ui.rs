@@ -1,3 +1,4 @@
+//! TUI 渲染层：根据 `TuiApp` 状态绘制 header、面板内容与输入区域。
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -44,7 +45,14 @@ fn draw_header(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     } else {
         app.tool_events.len()
     };
-    let phase = if app.pending_qa { "qa" } else { "run" }.to_string();
+    let phase = match app.input_mode {
+        InputMode::Prompt => "prompt",
+        InputMode::Normal => match app.status {
+            RunStatus::Running | RunStatus::Paused => "run",
+            RunStatus::Completed(_) | RunStatus::Error(_) => "review",
+        },
+    }
+    .to_string();
     let status_style = match app.status {
         RunStatus::Running => Style::default().fg(Color::Green),
         RunStatus::Paused => Style::default().fg(Color::Yellow),
@@ -65,12 +73,6 @@ fn draw_header(f: &mut Frame<'_>, area: Rect, app: &TuiApp) {
         Span::raw("  Dur: "),
         Span::styled(duration, Style::default().fg(Color::Gray)),
     ];
-    if app.pending_qa {
-        let qa_elapsed =
-            format_duration(app.qa_started_at.unwrap_or(app.start).elapsed().as_secs());
-        line_parts.push(Span::raw("  QA: "));
-        line_parts.push(Span::styled(qa_elapsed, Style::default().fg(Color::Yellow)));
-    }
     let line = Line::from(line_parts);
 
     let header = Paragraph::new(line).block(Block::default().borders(Borders::BOTTOM));
