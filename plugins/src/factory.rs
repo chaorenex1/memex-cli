@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::sync::Arc;
 
 use memex_core::backend::BackendStrategy;
 use memex_core::config::{
@@ -15,13 +16,13 @@ use crate::runner::codecli::CodeCliRunnerPlugin;
 use crate::runner::replay::ReplayRunnerPlugin;
 use crate::stream::{JsonlStreamStrategy, TextStreamStrategy};
 
-pub fn build_memory(cfg: &AppConfig) -> Result<Option<Box<dyn memex_core::memory::MemoryPlugin>>> {
+pub fn build_memory(cfg: &AppConfig) -> Result<Option<Arc<dyn memex_core::memory::MemoryPlugin>>> {
     if !cfg.memory.enabled {
         return Ok(None);
     }
 
     match &cfg.memory.provider {
-        MemoryProvider::Service(svc_cfg) => Ok(Some(Box::new(MemoryServicePlugin::new(
+        MemoryProvider::Service(svc_cfg) => Ok(Some(Arc::new(MemoryServicePlugin::new(
             svc_cfg.base_url.clone(),
             svc_cfg.api_key.clone(),
             svc_cfg.timeout_ms,
@@ -36,16 +37,16 @@ pub fn build_runner(cfg: &AppConfig) -> Box<dyn RunnerPlugin> {
     }
 }
 
-pub fn build_policy(cfg: &AppConfig) -> Option<Box<dyn memex_core::runner::PolicyPlugin>> {
+pub fn build_policy(cfg: &AppConfig) -> Option<Arc<dyn memex_core::runner::PolicyPlugin>> {
     match &cfg.policy.provider {
-        PolicyProvider::Config(_) => Some(Box::new(ConfigPolicyPlugin::new(cfg.policy.clone()))),
+        PolicyProvider::Config(_) => Some(Arc::new(ConfigPolicyPlugin::new(cfg.policy.clone()))),
     }
 }
 
-pub fn build_gatekeeper(cfg: &AppConfig) -> Box<dyn memex_core::gatekeeper::GatekeeperPlugin> {
+pub fn build_gatekeeper(cfg: &AppConfig) -> Arc<dyn memex_core::gatekeeper::GatekeeperPlugin> {
     match &cfg.gatekeeper.provider {
         GatekeeperProvider::Standard(std_cfg) => {
-            Box::new(StandardGatekeeperPlugin::new(std_cfg.clone().into()))
+            Arc::new(StandardGatekeeperPlugin::new(std_cfg.clone().into()))
         }
     }
 }

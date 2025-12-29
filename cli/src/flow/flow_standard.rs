@@ -1,5 +1,5 @@
 use memex_core::config::AppConfig;
-use memex_core::engine;
+use memex_core::api as core_api;
 use memex_core::error::RunnerError;
 use memex_core::events_out::EventsOutTx;
 use memex_core::memory::MemoryPlugin;
@@ -8,7 +8,7 @@ use memex_core::state::StateManager;
 use std::sync::Arc;
 
 use crate::commands::cli::{Args, RunArgs};
-use crate::flow::flow_qa::build_runner_spec;
+use crate::plan::build_runner_spec;
 
 pub async fn run_standard_flow(
     args: &Args,
@@ -21,9 +21,9 @@ pub async fn run_standard_flow(
     stream_enabled: bool,
     stream_format: &str,
     stream_silent: bool,
-    policy: Option<Box<dyn PolicyPlugin>>,
-    memory: Option<Box<dyn MemoryPlugin>>,
-    gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
+    policy: Option<Arc<dyn PolicyPlugin>>,
+    memory: Option<Arc<dyn MemoryPlugin>>,
+    gatekeeper: Arc<dyn memex_core::gatekeeper::GatekeeperPlugin>,
 ) -> Result<i32, RunnerError> {
     let user_query = resolve_user_query(args, run_args)?;
     let (runner_spec, start_data) = build_runner_spec(
@@ -35,8 +35,8 @@ pub async fn run_standard_flow(
         stream_format,
     )?;
 
-    engine::run_with_query(
-        engine::RunWithQueryArgs {
+    core_api::run_with_query(
+        core_api::RunWithQueryArgs {
             user_query,
             cfg: cfg.clone(),
             runner: runner_spec,

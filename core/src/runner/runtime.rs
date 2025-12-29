@@ -23,7 +23,7 @@ use super::RunnerEvent;
 pub struct RunSessionRuntimeInput<'a> {
     pub session: Box<dyn RunnerSession>,
     pub control_cfg: &'a ControlConfig,
-    pub policy: Option<Box<dyn PolicyPlugin>>,
+    pub policy: Option<Arc<dyn PolicyPlugin>>,
     pub capture_bytes: usize,
     pub events_out: Option<EventsOutTx>,
     pub event_tx: Option<mpsc::UnboundedSender<RunnerEvent>>,

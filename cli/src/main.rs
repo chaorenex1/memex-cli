@@ -2,6 +2,7 @@ use clap::Parser;
 mod app;
 mod commands;
 mod flow;
+mod plan;
 mod tui;
 mod utils;
 use commands::cli;

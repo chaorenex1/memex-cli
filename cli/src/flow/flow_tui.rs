@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use memex_core::config::TuiConfig;
-use memex_core::engine;
+use memex_core::api as core_api;
 use memex_core::engine::RunSessionInput;
 use memex_core::error::RunnerError;
 use memex_core::events_out::EventsOutTx;
@@ -17,7 +16,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::commands::cli::{Args, RunArgs};
-use crate::flow::flow_qa::build_runner_spec;
+use crate::plan::build_runner_spec;
 use crate::tui::{restore_terminal, setup_terminal, TuiApp};
 
 // Unified error handling for TUI
@@ -47,77 +46,6 @@ impl TuiRuntime {
     }
 }
 
-struct SharedPolicyPlugin(Arc<dyn PolicyPlugin>);
-
-#[async_trait]
-impl PolicyPlugin for SharedPolicyPlugin {
-    fn name(&self) -> &str {
-        self.0.name()
-    }
-
-    async fn check(
-        &self,
-        event: &memex_core::tool_event::ToolEvent,
-    ) -> memex_core::runner::PolicyAction {
-        self.0.check(event).await
-    }
-}
-
-struct SharedMemoryPlugin(Arc<dyn MemoryPlugin>);
-
-#[async_trait]
-impl MemoryPlugin for SharedMemoryPlugin {
-    fn name(&self) -> &str {
-        self.0.name()
-    }
-
-    async fn search(
-        &self,
-        payload: memex_core::memory::models::QASearchPayload,
-    ) -> anyhow::Result<Vec<memex_core::gatekeeper::SearchMatch>> {
-        self.0.search(payload).await
-    }
-
-    async fn record_hit(
-        &self,
-        payload: memex_core::memory::models::QAHitsPayload,
-    ) -> anyhow::Result<()> {
-        self.0.record_hit(payload).await
-    }
-
-    async fn record_candidate(
-        &self,
-        payload: memex_core::memory::models::QACandidatePayload,
-    ) -> anyhow::Result<()> {
-        self.0.record_candidate(payload).await
-    }
-
-    async fn record_validation(
-        &self,
-        payload: memex_core::memory::models::QAValidationPayload,
-    ) -> anyhow::Result<()> {
-        self.0.record_validation(payload).await
-    }
-}
-
-struct SharedGatekeeperPlugin(Arc<dyn memex_core::gatekeeper::GatekeeperPlugin>);
-
-impl memex_core::gatekeeper::GatekeeperPlugin for SharedGatekeeperPlugin {
-    fn name(&self) -> &str {
-        self.0.name()
-    }
-
-    fn evaluate(
-        &self,
-        now: chrono::DateTime<chrono::Utc>,
-        matches: &[memex_core::gatekeeper::SearchMatch],
-        outcome: &memex_core::runner::RunOutcome,
-        events: &[memex_core::tool_event::ToolEvent],
-    ) -> memex_core::gatekeeper::GatekeeperDecision {
-        self.0.evaluate(now, matches, outcome, events)
-    }
-}
-
 pub async fn run_tui_flow(
     args: &Args,
     run_args: Option<&RunArgs>,
@@ -129,15 +57,14 @@ pub async fn run_tui_flow(
     stream_enabled: bool,
     stream_format: &str,
     _stream_silent: bool,
-    policy: Option<Box<dyn PolicyPlugin>>,
-    memory: Option<Box<dyn MemoryPlugin>>,
-    gatekeeper: Box<dyn memex_core::gatekeeper::GatekeeperPlugin>,
+    policy: Option<Arc<dyn PolicyPlugin>>,
+    memory: Option<Arc<dyn MemoryPlugin>>,
+    gatekeeper: Arc<dyn memex_core::gatekeeper::GatekeeperPlugin>,
 ) -> Result<i32, RunnerError> {
     let mut tui = TuiRuntime::new(&cfg.tui, run_id.clone())?;
-    let shared_policy: Option<Arc<dyn PolicyPlugin>> = policy.map(Arc::from);
-    let shared_memory: Option<Arc<dyn MemoryPlugin>> = memory.map(Arc::from);
-    let shared_gatekeeper: Arc<dyn memex_core::gatekeeper::GatekeeperPlugin> =
-        Arc::from(gatekeeper);
+    let shared_policy = policy;
+    let shared_memory = memory;
+    let shared_gatekeeper = gatekeeper;
     
     tracing::debug!("TUI: Starting interactive loop");
     
@@ -219,14 +146,9 @@ pub async fn run_tui_flow(
         let query_run_id = Uuid::new_v4().to_string();
         tui.app.run_id = query_run_id.clone();
         
-        let query_policy = shared_policy.as_ref().map(|p| {
-            Box::new(SharedPolicyPlugin(p.clone())) as Box<dyn PolicyPlugin>
-        });
-        let query_memory = shared_memory.as_ref().map(|m| {
-            Box::new(SharedMemoryPlugin(m.clone())) as Box<dyn MemoryPlugin>
-        });
-        let query_gatekeeper = Box::new(SharedGatekeeperPlugin(shared_gatekeeper.clone()))
-            as Box<dyn memex_core::gatekeeper::GatekeeperPlugin>;
+        let query_policy = shared_policy.clone();
+        let query_memory = shared_memory.clone();
+        let query_gatekeeper = shared_gatekeeper.clone();
 
         let (runner_spec, start_data) = build_runner_spec(
             args,
@@ -237,8 +159,8 @@ pub async fn run_tui_flow(
             stream_format,
         )?;
          
-        let result = engine::run_with_query(
-            engine::RunWithQueryArgs {
+        let result = core_api::run_with_query(
+            core_api::RunWithQueryArgs {
                 user_query: user_input,
                 cfg: cfg.clone(),
                 runner: runner_spec,

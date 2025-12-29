@@ -22,8 +22,6 @@ ratatui = { workspace = true}
 crossterm = { workspace = true}
 atty = { workspace = true}
 arboard = "3.4"
-anyhow = { workspace = true }
-async-trait = { workspace = true }
 
 [lints]
 workspace = true
