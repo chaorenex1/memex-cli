@@ -120,7 +120,7 @@ pub async fn run_session_runtime(
     let mut parser_kind = if stream_format == "jsonl" {
         ParserKind::Jsonl(JsonlParser::new(events_out.clone(), run_id))
     } else {
-        ParserKind::Text(TextParser)
+        ParserKind::Text(TextParser::new(events_out.clone(), run_id))
     };
 
     let mut sink_kind = if let Some(tx) = tui_tx.clone() {

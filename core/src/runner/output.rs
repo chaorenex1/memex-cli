@@ -44,27 +44,6 @@ pub trait StreamParser: Send {
     async fn parse(&mut self, tap: &LineTap) -> Result<Vec<OutputEvent>, ParseError>;
 }
 
-pub struct TextParser;
-
-#[async_trait]
-impl StreamParser for TextParser {
-    async fn parse(&mut self, tap: &LineTap) -> Result<Vec<OutputEvent>, ParseError> {
-        if flow_audit_enabled() {
-            tracing::debug!(
-                target: "memex.flow",
-                stage = "parse.text.in",
-                stream = ?tap.stream,
-                bytes = tap.line.len(),
-                preview = %audit_preview(&tap.line)
-            );
-        }
-        Ok(vec![OutputEvent::RawLine {
-            stream: tap.stream,
-            text: tap.line.clone(),
-        }])
-    }
-}
-
 pub struct JsonlParser {
     events_out: Option<EventsOutTx>,
     configured_run_id: Option<String>,
@@ -280,6 +259,63 @@ impl StreamParser for JsonlParser {
             );
         }
         Ok(out)
+    }
+}
+
+pub struct TextParser {
+    jsonl: JsonlParser,
+}
+
+impl TextParser {
+    pub fn new(events_out: Option<EventsOutTx>, run_id: &str) -> Self {
+        Self {
+            jsonl: JsonlParser::new(events_out, run_id),
+        }
+    }
+}
+
+#[async_trait]
+impl StreamParser for TextParser {
+    async fn parse(&mut self, tap: &LineTap) -> Result<Vec<OutputEvent>, ParseError> {
+        if flow_audit_enabled() {
+            tracing::debug!(
+                target: "memex.flow",
+                stage = "parse.text.in",
+                stream = ?tap.stream,
+                bytes = tap.line.len(),
+                preview = %audit_preview(&tap.line)
+            );
+        }
+
+        match self.jsonl.parse(tap).await {
+            Ok(events) => {
+                // If we extracted ToolEvents, pass them through.
+                Ok(events
+                    .iter()
+                    .map(|e| OutputEvent::RawLine {
+                        stream: tap.stream,
+                        text: match e {
+                            OutputEvent::RawLine { text, .. } => text.clone(),
+                            OutputEvent::ToolEvent(te) => te
+                                .output
+                                .as_ref()
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        },
+                    })
+                    .collect())
+            }
+            Err(_) => {
+                // Parsing failed; fall through to raw line output.
+                // If the line looks like a tool event (prefixed or JSON), report parse error.
+                Err(ParseError {
+                    stream: tap.stream,
+                    line_preview: truncate(&tap.line, 240),
+                    reason: "invalid_tool_event_line",
+                })
+            }
+        }
     }
 }
 
