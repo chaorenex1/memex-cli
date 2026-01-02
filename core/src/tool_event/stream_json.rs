@@ -28,7 +28,7 @@ impl StreamJsonToolEventParser {
         // Shape examples (simplified):
         // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
         // - {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}}
-        if v.get("type").and_then(|x| x.as_str()) == Some("system") {
+        if v.get("type").and_then(|x| x.as_str()) == Some("system") && v.get("subtype").is_some() {
             let session_id = v
                 .get("session_id")
                 .and_then(|x| x.as_str())
@@ -49,7 +49,7 @@ impl StreamJsonToolEventParser {
                 rationale: None,
             });
         }
-        if v.get("type").and_then(|x| x.as_str()) == Some("result") {
+        if v.get("type").and_then(|x| x.as_str()) == Some("result") && v.get("subtype").is_some() {
             let subtype = v.get("subtype").and_then(|x| x.as_str()).unwrap_or("");
             let result = v.get("result").cloned().unwrap_or(Value::Null);
             let is_error = v.get("is_error").and_then(|x| x.as_bool()).unwrap_or(false);
@@ -70,12 +70,13 @@ impl StreamJsonToolEventParser {
         }
         if v.get("type").and_then(|x| x.as_str()) == Some("assistant") {
             if let Some(assistant_message) = v.get("message").and_then(|c| c.as_object()) {
-                let message = assistant_message.get("message")?;
+                let default_message = Value::String("{}".to_string());
+                let message = assistant_message.get("message").unwrap_or(&default_message);
                 let items = assistant_message
                     .get("content")
                     .and_then(|c| c.as_array())?;
                 for item in items {
-                    if item.get("type").and_then(|x| x.as_str()) != Some("tool_use") {
+                    if item.get("type").and_then(|x| x.as_str()) == Some("tool_use") {
                         let id = item
                             .get("id")
                             .and_then(|x| x.as_str())
@@ -158,7 +159,8 @@ impl StreamJsonToolEventParser {
 
         if v.get("type").and_then(|x| x.as_str()) == Some("user") {
             if let Some(user_message) = v.get("message").and_then(|c| c.as_object()) {
-                let message = user_message.get("message")?;
+                let default_message = Value::String("{}".to_string());
+                let message = user_message.get("message").unwrap_or(&default_message);
                 let items = user_message.get("content").and_then(|c| c.as_array())?;
                 for item in items {
                     if item.get("type").and_then(|x| x.as_str()) == Some("tool_result") {
@@ -192,7 +194,7 @@ impl StreamJsonToolEventParser {
                             run_id: None,
                             id,
                             tool: None,
-                            action: None,
+                            action: Some(message.to_string()),
                             args: Value::Null,
                             ok,
                             output,

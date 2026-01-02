@@ -17,6 +17,9 @@ fn parses_real_claude_stream_json_log() {
     );
 
     // Claude tool_use/tool_result are wrapped in envelopes; spot-check basic fields and id round-trip.
+    events.iter().for_each(|ev| {
+        println!("{}", serde_json::to_string_pretty(ev).unwrap());
+    });
     let (id, _tool) = first_tool_request_with_id_and_tool(&events)
         .expect("expected a tool.request with id+tool in claude log");
 
