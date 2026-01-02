@@ -131,7 +131,10 @@ impl MemoryClient {
             stage = "memory.http.task_grade.in",
             url = %url
         );
-        let req = self.http.post(url).json(&serde_json::json!({ "prompt": prompt }));
+        let req = self
+            .http
+            .post(url)
+            .json(&serde_json::json!({ "prompt": prompt }));
         let resp = self.auth(req).send().await?;
         let status = resp.status();
         let v = resp.json::<Value>().await?;

@@ -1,45 +1,33 @@
-use crate::commands::cli::TaskLevel;
+use memex_core::api as core_api;
 
-pub fn infer_task_level(prompt: &str) -> TaskLevel {
+pub async fn infer_task_level(
+    prompt: &str,
+    model: &str,
+    model_provider: &str,
+    query_services: &core_api::Services,
+) -> core_api::TaskGradeResult {
     let s = prompt.trim();
-    if s.is_empty() {
-        return TaskLevel::L1;
-    }
-
-    let lower = s.to_ascii_lowercase();
-
-    // Strong engineering / multi-step signals => L2
-    if lower.contains("architecture")
-        || lower.contains("debug")
-        || lower.contains("refactor")
-        || lower.contains("compile")
-        || lower.contains("cargo")
-        || lower.contains("stack trace")
-        || lower.contains("benchmark")
-        || s.contains("```")
-    {
-        return TaskLevel::L2;
-    }
-
-    // High creativity / style-heavy signals => L3
-    if lower.contains("story")
-        || lower.contains("novel")
-        || lower.contains("brand")
-        || lower.contains("marketing")
-        || lower.contains("style")
-    {
-        return TaskLevel::L3;
-    }
-
-    // Very short tool-like requests => L0
-    if s.chars().count() <= 200
-        && (lower.contains("translate")
-            || lower.contains("format")
-            || lower.contains("json")
-            || lower.contains("rewrite"))
-    {
-        return TaskLevel::L0;
-    }
-
-    TaskLevel::L1
+    let Some(memory_plugin) = query_services.memory.as_ref() else {
+        return core_api::TaskGradeResult {
+            task_level: 0,
+            reason: "Memory plugin not available".to_string(),
+            recommended_model: model.to_string(),
+            recommended_model_provider: Some(model_provider.to_string()),
+            confidence: 0.0,
+        };
+    };
+    let result = match memory_plugin.task_grade(s.to_string()).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("Failed to infer task level: {}", e);
+            core_api::TaskGradeResult {
+                task_level: 0,
+                reason: "Failed to infer task level".to_string(),
+                recommended_model: model.to_string(),
+                recommended_model_provider: Some(model_provider.to_string()),
+                confidence: 0.0,
+            }
+        }
+    };
+    result
 }

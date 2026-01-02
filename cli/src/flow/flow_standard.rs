@@ -16,7 +16,15 @@ pub async fn run_standard_flow(
     services: &core_api::Services,
 ) -> Result<i32, core_api::RunnerError> {
     let user_query = resolve_user_query(args, run_args)?;
-    let plan_req = build_plan_request(args, run_args, recover_run_id, stream_format, project_id);
+    let plan_req = build_plan_request(
+        services,
+        args,
+        run_args,
+        recover_run_id,
+        stream_format,
+        project_id,
+    )
+    .await;
     let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
 
     core_api::run_with_query(
@@ -78,7 +86,8 @@ fn resolve_user_query(
     Ok(prompt_text.unwrap_or_else(|| args.codecli_args.join(" ")))
 }
 
-fn build_plan_request(
+async fn build_plan_request(
+    query_services: &core_api::Services,
     args: &Args,
     run_args: Option<&RunArgs>,
     recover_run_id: Option<String>,
@@ -92,26 +101,30 @@ fn build_plan_request(
                 crate::commands::cli::BackendKind::Aiservice => "aiservice".to_string(),
             });
 
-            let task_level = match ra.task_level {
-                crate::commands::cli::TaskLevel::Auto => {
-                    let prompt_for_level = ra
-                        .prompt
-                        .clone()
-                        .unwrap_or_else(|| args.codecli_args.join(" "));
-                    format!("{:?}", infer_task_level(&prompt_for_level))
-                }
-                lv => format!("{lv:?}"),
-            };
+            let task_grade_result = infer_task_level(
+                &ra.prompt.clone().unwrap_or_default(),
+                ra.model.as_deref().unwrap_or(""),
+                ra.model_provider.as_deref().unwrap_or(""),
+                query_services,
+            )
+            .await;
+            tracing::info!(
+                " Inferred task level: {}, reason: {}, recommended model: {}, confidence: {}",
+                task_grade_result.task_level,
+                task_grade_result.reason,
+                task_grade_result.recommended_model,
+                task_grade_result.confidence,
+            );
 
             PlanMode::Backend {
                 backend_spec: ra.backend.clone(),
                 backend_kind,
                 env_file: ra.env_file.clone(),
                 env: ra.env.clone(),
-                model: ra.model.clone(),
-                model_provider: ra.model_provider.clone(),
+                model: task_grade_result.recommended_model.clone().into(),
+                model_provider: task_grade_result.recommended_model_provider.clone(),
                 project_id: Some(project_id.to_string()),
-                task_level: Some(task_level),
+                task_level: Some(task_grade_result.task_level.to_string()),
             }
         }
         None => PlanMode::Legacy {
