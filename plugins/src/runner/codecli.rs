@@ -29,9 +29,10 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
 
     async fn start_session(&self, args: &RunnerStartArgs) -> Result<Box<dyn RunnerSession>> {
         tracing::info!(
-            "Starting CodeCliRunnerSession: cmd={:?}, args={:?}",
+            "Starting CodeCliRunnerSession: cmd={:?}, args={:?} , envs={:?}",
             args.cmd,
             args.args,
+            args.envs
         );
         let mut cmd = Command::new(&args.cmd);
         cmd.args(&args.args)
@@ -39,6 +40,12 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        if let Some(cwd) = args.cwd.as_deref() {
+            if !cwd.trim().is_empty() {
+                cmd.current_dir(cwd);
+            }
+        }
 
         // Windows: 防止弹出控制台窗口
         #[cfg(windows)]

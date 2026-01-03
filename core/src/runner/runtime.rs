@@ -108,11 +108,24 @@ pub async fn run_session_runtime(
 
     let fail_closed = control_cfg.fail_mode.as_str() == "closed";
 
-    let (ctl_tx, mut writer_err_rx, ctl_task) = control::spawn_control_writer(
-        stdin,
-        control_cfg.control_channel_capacity,
-        control_cfg.control_writer_error_capacity,
-    );
+    // CodeCLI runner sessions are expected to be non-interactive.
+    // Keeping stdin open (piped) can cause some CLIs to wait indefinitely for input.
+    // Since codecli skips policy/control messages, close stdin immediately for this backend.
+    let (ctl_tx, mut writer_err_rx, ctl_task) = if backend_kind == "codecli" {
+        drop(stdin);
+        let (ctl_tx, _ctl_rx) = mpsc::channel::<serde_json::Value>(1);
+        let (_err_tx, err_rx) = mpsc::channel::<String>(1);
+        drop(_ctl_rx);
+        drop(_err_tx);
+        let task = tokio::spawn(async move { Ok(()) });
+        (ctl_tx, err_rx, task)
+    } else {
+        control::spawn_control_writer(
+            stdin,
+            control_cfg.control_channel_capacity,
+            control_cfg.control_writer_error_capacity,
+        )
+    };
 
     let decision_timeout = Duration::from_millis(control_cfg.decision_timeout_ms);
     let mut tick = tokio::time::interval(Duration::from_millis(control_cfg.tick_interval_ms));

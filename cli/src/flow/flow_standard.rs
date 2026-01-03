@@ -103,22 +103,21 @@ async fn build_plan_request(
                 crate::commands::cli::BackendKind::Aiservice => "aiservice".to_string(),
             });
 
-            let task_grade_result = infer_task_level(
-                user_query,
-                ra.model.as_deref().unwrap_or(""),
-                ra.model_provider.as_deref().unwrap_or(""),
-                query_services,
-            )
-            .await;
-            tracing::info!(
-                " Inferred task level: {}, reason: {}, recommended model: {}, confidence: {}",
-                task_grade_result.task_level,
-                task_grade_result.reason,
-                task_grade_result.recommended_model,
-                task_grade_result.confidence,
-            );
-
             if ra.backend == "codex" {
+                let task_grade_result = infer_task_level(
+                    user_query,
+                    ra.model.as_deref().unwrap_or(""),
+                    ra.model_provider.as_deref().unwrap_or(""),
+                    query_services,
+                )
+                .await;
+                tracing::info!(
+                    " Inferred task level: {}, reason: {}, recommended model: {}, confidence: {}",
+                    task_grade_result.task_level,
+                    task_grade_result.reason,
+                    task_grade_result.recommended_model,
+                    task_grade_result.confidence,
+                );
                 PlanMode::Backend {
                     backend_spec: ra.backend.clone(),
                     backend_kind,

@@ -48,6 +48,7 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
                 // args[0] holds the prompt
                 args: vec![prompt],
                 envs: base_envs,
+                cwd: None,
             },
         })
     }
