@@ -32,6 +32,10 @@ pub struct RunnerStartArgs {
     pub cmd: String,
     pub args: Vec<String>,
     pub envs: HashMap<String, String>,
+    /// Optional working directory for the spawned process.
+    ///
+    /// When set, runner implementations should call `Command::current_dir`.
+    pub cwd: Option<String>,
 }
 
 #[derive(Debug, Clone)]

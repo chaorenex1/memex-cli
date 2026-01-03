@@ -1,4 +1,4 @@
-use memex_core::tool_event::{MultiToolEventLineParser, ToolEvent, TOOL_EVENT_PREFIX};
+use memex_core::api::{MultiToolEventLineParser, ToolEvent, TOOL_EVENT_PREFIX};
 
 pub fn parse_events_from_str(input: &str) -> Vec<ToolEvent> {
     let mut parser = MultiToolEventLineParser::new(TOOL_EVENT_PREFIX);

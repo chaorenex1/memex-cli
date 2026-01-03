@@ -1,8 +1,7 @@
-use clap::{Args as ClapArgs, Parser, Subcommand};
+﻿use clap::{Args as ClapArgs, Parser, Subcommand};
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
 pub enum BackendKind {
-    Auto,
     Codecli,
     Aiservice,
 }
@@ -16,7 +15,7 @@ pub enum TaskLevel {
     L3,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct Args {
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -40,11 +39,14 @@ pub struct RunArgs {
     /// - auto: URL => aiservice, otherwise => codecli
     /// - codecli: treat backend as a local binary name/path
     /// - aiservice: treat backend as an http(s) URL
-    #[arg(long, value_enum, default_value_t = BackendKind::Auto)]
-    pub backend_kind: BackendKind,
+    #[arg(long, value_enum)]
+    pub backend_kind: Option<BackendKind>,
 
     #[arg(long)]
     pub model: Option<String>,
+
+    #[arg(long)]
+    pub model_provider: Option<String>,
 
     /// Task level for scheduling/strategy hints.
     /// - auto: infer from prompt (fast heuristic)
@@ -61,16 +63,22 @@ pub struct RunArgs {
     #[arg(long, group = "input")]
     pub stdin: bool,
 
-    #[arg(long)]
-    pub stream: bool,
-
     #[arg(long, default_value = "text")]
     pub stream_format: String,
+
+    /// Force TUI mode (does not affect `--stream-format`).
+    #[arg(long, default_value_t = false)]
+    pub tui: bool,
 
     /// Extra environment variables to pass to the backend process (KEY=VALUE).
     /// Can be specified multiple times.
     #[arg(long = "env", action = clap::ArgAction::Append)]
     pub env: Vec<String>,
+
+    /// Load environment variables from a file (KEY=VALUE per line).
+    /// Lines starting with # are ignored. Empty lines are not allowed.
+    #[arg(long = "env-file", alias = "env_file")]
+    pub env_file: Option<String>,
 
     #[arg(long)]
     pub project_id: Option<String>,
@@ -109,7 +117,7 @@ pub struct ResumeArgs {
     pub run_id: String,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
     Replay(ReplayArgs),

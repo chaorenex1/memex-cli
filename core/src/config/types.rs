@@ -2,11 +2,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    #[serde(default = "default_project_id")]
-    pub project_id: String,
+    #[serde(default = "default_backend_kind")]
+    pub backend_kind: String,
+
+    #[serde(default)]
+    pub env_file: String,
 
     #[serde(default)]
     pub logging: LoggingConfig,
+
+    #[serde(default)]
+    pub tui: TuiConfig,
 
     #[serde(default)]
     pub control: ControlConfig,
@@ -33,15 +39,21 @@ pub struct AppConfig {
     pub gatekeeper: GatekeeperConfig,
 }
 
-fn default_project_id() -> String {
-    "my-project".to_string()
+fn default_backend_kind() -> String {
+    "codecli".to_string()
+}
+
+fn default_env_file() -> String {
+    ".env".to_string()
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            project_id: default_project_id(),
+            backend_kind: default_backend_kind(),
+            env_file: default_env_file(),
             logging: LoggingConfig::default(),
+            tui: TuiConfig::default(),
             control: ControlConfig::default(),
             policy: PolicyConfig::default(),
             memory: MemoryConfig::default(),
@@ -104,6 +116,73 @@ impl Default for LoggingConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TuiConfig {
+    #[serde(default = "default_tui_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_tui_auto_scroll")]
+    pub auto_scroll: bool,
+    #[serde(default = "default_tui_show_splash")]
+    pub show_splash: bool,
+    #[serde(default = "default_tui_splash_duration_ms")]
+    pub splash_duration_ms: u64,
+    #[serde(default = "default_tui_splash_animation")]
+    pub splash_animation: bool,
+    #[serde(default = "default_tui_update_interval_ms")]
+    pub update_interval_ms: u64,
+    #[serde(default = "default_tui_max_tool_events")]
+    pub max_tool_events: usize,
+    #[serde(default = "default_tui_max_output_lines")]
+    pub max_output_lines: usize,
+}
+
+fn default_tui_enabled() -> bool {
+    true
+}
+
+fn default_tui_auto_scroll() -> bool {
+    true
+}
+
+fn default_tui_show_splash() -> bool {
+    true
+}
+
+fn default_tui_splash_duration_ms() -> u64 {
+    1500
+}
+
+fn default_tui_splash_animation() -> bool {
+    true
+}
+
+fn default_tui_update_interval_ms() -> u64 {
+    50
+}
+
+fn default_tui_max_tool_events() -> usize {
+    1000
+}
+
+fn default_tui_max_output_lines() -> usize {
+    10000
+}
+
+impl Default for TuiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_tui_enabled(),
+            auto_scroll: default_tui_auto_scroll(),
+            show_splash: default_tui_show_splash(),
+            splash_duration_ms: default_tui_splash_duration_ms(),
+            splash_animation: default_tui_splash_animation(),
+            update_interval_ms: default_tui_update_interval_ms(),
+            max_tool_events: default_tui_max_tool_events(),
+            max_output_lines: default_tui_max_output_lines(),
+        }
+    }
+}
+
 impl AppConfig {
     // NOTE: gatekeeper 逻辑配置的转换实现迁移到 crate::gatekeeper 模块，
     // 以避免 core::config 反向依赖业务模块。
@@ -120,7 +199,7 @@ pub struct EventsOutConfig {
 impl Default for EventsOutConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             path: "./run.events.jsonl".to_string(),
             channel_capacity: 2048,
             drop_when_full: true,

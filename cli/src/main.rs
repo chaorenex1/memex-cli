@@ -1,10 +1,18 @@
+//! CLI 二进制入口：解析命令行参数、加载配置、初始化 tracing，并把控制权交给 `app`/`commands`。
 use clap::Parser;
 mod app;
 mod commands;
+mod flow;
+mod task_level;
+mod tui;
 use commands::cli;
-use memex_core::error;
-use memex_core::replay;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
+use core_api::{AppContext, CliError, RunnerError};
+use memex_core::api as core_api;
+use memex_plugins::services::PluginServicesFactory;
+use std::sync::Arc;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 static LOG_GUARD: std::sync::OnceLock<tracing_appender::non_blocking::WorkerGuard> =
@@ -23,74 +31,73 @@ async fn main() {
     std::process::exit(exit);
 }
 
-async fn real_main() -> Result<i32, error::CliError> {
+async fn real_main() -> Result<i32, CliError> {
     let mut args = cli::Args::parse();
-    let cfg =
-        memex_core::config::load_default().map_err(|e| error::CliError::Config(e.to_string()))?;
-    init_tracing(&cfg.logging).map_err(error::CliError::Command)?;
+    let cfg = core_api::load_default().map_err(|e| CliError::Config(e.to_string()))?;
+    init_tracing(&cfg.logging).map_err(CliError::Command)?;
+
+    let services_factory: Option<Arc<dyn core_api::ServicesFactory>> =
+        Some(Arc::new(PluginServicesFactory));
+    let ctx = AppContext::new(cfg, services_factory)
+        .await
+        .map_err(CliError::Runner)?;
 
     let cmd = args.command.take();
 
     if let Some(cmd) = cmd {
-        return dispatch(cmd, args, cfg).await;
+        return dispatch(cmd, args, ctx).await;
     }
-
-    let exit = app::run_app_with_config(args, None, None, cfg).await?;
-    Ok(exit)
+    Ok(0)
 }
 
-fn exit_code_for_error(e: &error::CliError) -> i32 {
+fn exit_code_for_error(e: &CliError) -> i32 {
     // 0: success
     // 11: config error
     // 20: runner start / IO error
     // 40: policy deny (usually returned as a normal exit code, not as an error)
     // 50: internal/uncategorized
     match e {
-        error::CliError::Config(_) => 11,
-        error::CliError::Runner(re) => match re {
-            error::RunnerError::Config(_) => 11,
-            error::RunnerError::Spawn(_) => 20,
-            error::RunnerError::StreamIo { .. } => 20,
-            error::RunnerError::Plugin(_) => 50,
+        CliError::Config(_) => 11,
+        CliError::Runner(re) => match re {
+            RunnerError::Config(_) => 11,
+            RunnerError::Spawn(_) => 20,
+            RunnerError::StreamIo { .. } => 20,
+            RunnerError::Plugin(_) => 50,
         },
-        error::CliError::Io(_) => 20,
-        error::CliError::Command(_) => 20,
-        error::CliError::Replay(_) => 50,
-        error::CliError::Anyhow(_) => 50,
+        CliError::Io(_) => 20,
+        CliError::Command(_) => 20,
+        CliError::Replay(_) => 50,
+        CliError::Anyhow(_) => 50,
     }
 }
 
-async fn dispatch(
-    cmd: cli::Commands,
-    args: cli::Args,
-    cfg: memex_core::config::AppConfig,
-) -> Result<i32, error::CliError> {
+async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Result<i32, CliError> {
     match cmd {
         cli::Commands::Run(run_args) => {
-            let exit = app::run_app_with_config(args, Some(run_args), None, cfg).await?;
+            let exit = app::run_app_with_config(args, Some(run_args), None, &ctx).await?;
             Ok(exit)
         }
         cli::Commands::Replay(replay_args) => {
-            let core_args = replay::ReplayArgs {
+            let core_args = core_api::ReplayArgs {
                 events: replay_args.events,
                 run_id: replay_args.run_id,
                 format: replay_args.format,
                 set: replay_args.set,
                 rerun_gatekeeper: replay_args.rerun_gatekeeper,
             };
-            replay::replay_cmd(core_args).map_err(error::CliError::Replay)?;
+            core_api::replay_cmd(core_args).map_err(CliError::Replay)?;
             Ok(0)
         }
         cli::Commands::Resume(resume_args) => {
             let recover_id = Some(resume_args.run_id.clone());
-            let exit =
-                app::run_app_with_config(args, Some(resume_args.run_args), recover_id, cfg).await?;
+            let exit = app::run_app_with_config(args, Some(resume_args.run_args), recover_id, &ctx)
+                .await?;
             Ok(exit)
         }
     }
 }
 
-fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), String> {
+fn init_tracing(logging: &core_api::LoggingConfig) -> Result<(), String> {
     if !logging.enabled {
         return Ok(());
     }
@@ -114,21 +121,40 @@ fn init_tracing(logging: &memex_core::config::LoggingConfig) -> Result<(), Strin
         };
 
         std::fs::create_dir_all(&dir).map_err(|e| format!("create log dir failed: {e}"))?;
-        let file_name = format!("memex-cli.{}.log", std::process::id());
-        let appender = tracing_appender::rolling::never(dir, file_name);
-        let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+        let file_name = "memex-cli.log";
+        // let appender = tracing_appender::rolling::daily(dir, file_name);
+        let file_appender = RollingFileAppender::builder()
+            .rotation(Rotation::DAILY)
+            .max_log_files(3)
+            .filename_prefix(file_name)
+            .build(dir)
+            .unwrap();
+        let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
         let _ = LOG_GUARD.set(guard);
         maybe_writer = Some(non_blocking);
     }
 
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
-
-    match (logging.console, maybe_writer) {
-        (true, Some(w)) => builder.with_writer(std::io::stderr.and(w)).init(),
-        (true, None) => builder.with_writer(std::io::stderr).init(),
-        (false, Some(w)) => builder.with_writer(w).init(),
-        (false, None) => return Err("logging disabled for both console and file".to_string()),
+    if !logging.console && maybe_writer.is_none() {
+        return Err("logging disabled for both console and file".to_string());
     }
+
+    let console_layer = logging.console.then(|| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(atty::is(atty::Stream::Stderr))
+    });
+
+    let file_layer = maybe_writer.map(|w| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(w)
+            .with_ansi(false)
+    });
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(console_layer)
+        .with(file_layer)
+        .init();
 
     Ok(())
 }

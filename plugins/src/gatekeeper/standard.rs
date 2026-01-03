@@ -1,21 +1,17 @@
 use chrono::{DateTime, Utc};
-use memex_core::gatekeeper::{
-    Gatekeeper, GatekeeperConfig, GatekeeperDecision, GatekeeperPlugin, SearchMatch,
-};
-use memex_core::runner::RunOutcome;
-use memex_core::tool_event::ToolEvent;
+use memex_core::api as core_api;
 
 pub struct StandardGatekeeperPlugin {
-    config: GatekeeperConfig,
+    config: core_api::GatekeeperConfig,
 }
 
 impl StandardGatekeeperPlugin {
-    pub fn new(config: GatekeeperConfig) -> Self {
+    pub fn new(config: core_api::GatekeeperConfig) -> Self {
         Self { config }
     }
 }
 
-impl GatekeeperPlugin for StandardGatekeeperPlugin {
+impl core_api::GatekeeperPlugin for StandardGatekeeperPlugin {
     fn name(&self) -> &str {
         "standard"
     }
@@ -23,12 +19,12 @@ impl GatekeeperPlugin for StandardGatekeeperPlugin {
     fn evaluate(
         &self,
         now: DateTime<Utc>,
-        matches: &[SearchMatch],
-        outcome: &RunOutcome,
-        events: &[ToolEvent],
-    ) -> GatekeeperDecision {
+        matches: &[core_api::SearchMatch],
+        outcome: &core_api::RunOutcome,
+        events: &[core_api::ToolEvent],
+    ) -> core_api::GatekeeperDecision {
         // Delegate to existing logic in src/gatekeeper/evaluate.rs
         // We might want to move that logic here eventually, but for now delegating is safer.
-        Gatekeeper::evaluate(&self.config, now, matches, outcome, events)
+        core_api::Gatekeeper::evaluate(&self.config, now, matches, outcome, events)
     }
 }

@@ -1,1 +1,1 @@
-pub use memex_core::memory::MemoryPlugin;
+pub use memex_core::api::MemoryPlugin;

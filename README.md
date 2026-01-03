@@ -58,6 +58,24 @@ memex-cli run \
   --stream
 ```
 
+codex:
+
+```bash
+memex-cli run --backend "codex" --model "deepseek-reasoner" --model-provider "aduib_ai" --prompt "10道四则运算题,写入文件" --stream-format "jsonl"
+```
+
+claude:
+
+```bash
+run --backend "claude" --prompt "10道四则运算题,写入文件" --stream-format "jsonl"
+```
+
+gemini:
+
+```bash
+memex-cli run --backend "gemini" --prompt "10道四则运算题,写入文件" --stream-format "jsonl"
+```
+
 后端也可以是 URL（搭配 `--backend-kind aiservice`，或让 `auto` 自动判定）。
 
 #### 兼容模式：不带子命令（透传到本地 codecli）

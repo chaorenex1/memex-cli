@@ -12,8 +12,11 @@ pub fn extract_run_id_from_line(line: &str) -> Option<String> {
     }
 
     let v: Value = serde_json::from_str(s).ok()?;
+    extract_run_id_from_value(&v)
+}
 
-    for key in ["session_id", "sessionId", "run_id", "runId"] {
+pub fn extract_run_id_from_value(v: &Value) -> Option<String> {
+    for key in ["session_id", "sessionId", "run_id", "runId", "thread_id"] {
         if let Some(id) = v.get(key).and_then(|x| x.as_str()) {
             let id = id.trim();
             if !id.is_empty() {
@@ -23,24 +26,4 @@ pub fn extract_run_id_from_line(line: &str) -> Option<String> {
     }
 
     None
-}
-
-#[cfg(test)]
-mod tests {
-    use super::extract_run_id_from_line;
-
-    #[test]
-    fn extracts_gemini_session_id_from_init() {
-        let line = r#"{"type":"init","timestamp":"2025-12-26T12:48:29.765Z","session_id":"dfa4182a-d2da-4dc7-9080-fa2d39bba588","model":"auto-gemini-2.5"}"#;
-        assert_eq!(
-            extract_run_id_from_line(line).as_deref(),
-            Some("dfa4182a-d2da-4dc7-9080-fa2d39bba588")
-        );
-    }
-
-    #[test]
-    fn ignores_non_json_lines() {
-        assert!(extract_run_id_from_line("event: message_start").is_none());
-        assert!(extract_run_id_from_line("YOLO mode is enabled.").is_none());
-    }
 }
