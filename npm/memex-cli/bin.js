@@ -4,10 +4,10 @@ const { execFileSync } = require("child_process");
 const { join } = require("path");
 
 const PLATFORMS = {
-  "darwin-arm64": "memex-cli-darwin-arm64",
-  "darwin-x64": "memex-cli-darwin-x64",
-  "linux-x64": "memex-cli-linux-x64",
-  "win32-x64": "memex-cli-win32-x64",
+  "darwin-arm64": "@memex-cli/darwin-arm64",
+  "darwin-x64": "@memex-cli/darwin-x64",
+  "linux-x64": "@memex-cli/linux-x64",
+  "win32-x64": "@memex-cli/win32-x64",
 };
 
 function getPlatformPackage() {

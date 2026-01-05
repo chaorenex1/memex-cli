@@ -1,5 +1,5 @@
 ﻿{
-    "name":  "memex-cli-win32-x64",
+    "name": "@memex-cli/win32-x64",
     "version":  "1.0.2",
     "description":  "memex-cli binary for Windows x64",
     "repository":  {

@@ -1,5 +1,5 @@
 ﻿{
-    "name":  "memex-cli-linux-x64",
+    "name": "@memex-cli/linux-x64",
     "version":  "1.0.2",
     "description":  "memex-cli binary for Linux x64",
     "repository":  {
