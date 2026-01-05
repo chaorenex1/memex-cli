@@ -1,6 +1,6 @@
 ﻿{
     "name":  "memex-cli",
-    "version":  "1.0.1",
+    "version":  "1.0.2",
     "description":  "CLI shell wrapper with memory, replay, and resume capabilities",
     "repository":  {
                        "type":  "git",
@@ -14,12 +14,12 @@
     "files":  [
                   "bin.js"
               ],
-    "optionalDependencies": {
-    "memex-cli-darwin-arm64": "1.0.1",
-    "memex-cli-darwin-x64": "1.0.1",
-    "memex-cli-linux-x64": "1.0.1",
-    "memex-cli-win32-x64": "1.0.1"
-  },
+    "optionalDependencies":  {
+                                 "memex-cli-darwin-arm64":  "1.0.2",
+                                 "memex-cli-darwin-x64":  "1.0.2",
+                                 "memex-cli-linux-x64":  "1.0.2",
+                                 "memex-cli-win32-x64":  "1.0.2"
+                             },
     "engines":  {
                     "node":  "\u003e=14"
                 },
