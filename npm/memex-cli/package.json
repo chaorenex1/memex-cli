@@ -4,7 +4,7 @@
     "description":  "CLI shell wrapper with memory, replay, and resume capabilities",
     "repository":  {
                        "type":  "git",
-                       "url":  "git+https://github.com/chaorenex/memex-cli.git"
+                       "url":  "git+https://github.com/chaorenex1/memex-cli.git"
                    },
     "license":  "Apache-2.0",
     "author":  "chaorenex1",
