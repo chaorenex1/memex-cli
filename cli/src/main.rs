@@ -119,6 +119,22 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
                 .await?;
             Ok(exit)
         }
+        cli::Commands::Search(search_args) => {
+            commands::memory::handle_search(search_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::RecordCandidate(record_args) => {
+            commands::memory::handle_record_candidate(record_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::RecordHit(hit_args) => {
+            commands::memory::handle_record_hit(hit_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::RecordSession(session_args) => {
+            commands::memory::handle_record_session(session_args, &ctx).await?;
+            Ok(0)
+        }
     }
 }
 

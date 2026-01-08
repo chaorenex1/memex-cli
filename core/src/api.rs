@@ -17,7 +17,7 @@ pub use crate::gatekeeper::{
 };
 pub use crate::memory::{
     parse_search_matches, MemoryClient, MemoryPlugin, QACandidatePayload, QAHitsPayload,
-    QASearchPayload, QAValidationPayload,
+    QAReferencePayload, QASearchPayload, QAValidationPayload,
 };
 pub use crate::replay::{replay_cmd, ReplayArgs};
 pub use crate::runner::{

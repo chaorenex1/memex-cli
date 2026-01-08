@@ -118,9 +118,97 @@ pub struct ResumeArgs {
     pub run_id: String,
 }
 
+#[derive(ClapArgs, Debug, Clone)]
+pub struct SearchArgs {
+    /// Search query (required)
+    #[arg(long)]
+    pub query: String,
+
+    /// Maximum number of results
+    #[arg(long, default_value_t = 5)]
+    pub limit: u32,
+
+    /// Minimum relevance score threshold (0.0 - 1.0)
+    #[arg(long, default_value_t = 0.6)]
+    pub min_score: f32,
+
+    /// Output format: json or markdown
+    #[arg(long, default_value = "json")]
+    pub format: String,
+
+    /// Project ID (defaults to config)
+    #[arg(long)]
+    pub project_id: Option<String>,
+}
+
+#[derive(ClapArgs, Debug, Clone)]
+pub struct RecordCandidateArgs {
+    /// Original query/question (required)
+    #[arg(long)]
+    pub query: String,
+
+    /// Answer/solution (required)
+    #[arg(long)]
+    pub answer: String,
+
+    /// Comma-separated tags
+    #[arg(long)]
+    pub tags: Option<String>,
+
+    /// Comma-separated file paths
+    #[arg(long)]
+    pub files: Option<String>,
+
+    /// Additional metadata in JSON format
+    #[arg(long)]
+    pub metadata: Option<String>,
+
+    /// Project ID (defaults to config)
+    #[arg(long)]
+    pub project_id: Option<String>,
+}
+
+#[derive(ClapArgs, Debug, Clone)]
+pub struct RecordHitArgs {
+    /// Comma-separated list of used QA IDs (required)
+    #[arg(long)]
+    pub qa_ids: String,
+
+    /// Comma-separated list of shown QA IDs
+    #[arg(long)]
+    pub shown: Option<String>,
+
+    /// Project ID (defaults to config)
+    #[arg(long)]
+    pub project_id: Option<String>,
+}
+
+#[derive(ClapArgs, Debug, Clone)]
+pub struct RecordSessionArgs {
+    /// Session transcript file path (JSONL format)
+    #[arg(long)]
+    pub transcript: String,
+
+    /// Session ID
+    #[arg(long)]
+    pub session_id: String,
+
+    /// Project ID (defaults to config)
+    #[arg(long)]
+    pub project_id: Option<String>,
+
+    /// Only extract knowledge, don't write to memory service
+    #[arg(long, default_value_t = false)]
+    pub extract_only: bool,
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
     Replay(ReplayArgs),
     Resume(ResumeArgs),
+    Search(SearchArgs),
+    RecordCandidate(RecordCandidateArgs),
+    RecordHit(RecordHitArgs),
+    RecordSession(RecordSessionArgs),
 }
