@@ -88,6 +88,10 @@ impl StreamJsonToolEventParser {
                         let args = item.get("input").cloned().unwrap_or(Value::Null);
                         let name = item.get("name").and_then(|x| x.as_str());
 
+                        if let (Some(id), Some(tool)) = (id.clone(), tool.clone()) {
+                            self.pending_tool_name_by_id.insert(id, tool);
+                        }
+
                         return Some(ToolEvent {
                             v: 1,
                             event_type: "tool.request".to_string(),
@@ -187,13 +191,17 @@ impl StreamJsonToolEventParser {
                             .cloned()
                             .or_else(|| v.get("tool_use_result").cloned());
 
+                        let tool = id
+                .as_ref()
+                .and_then(|tid| self.pending_tool_name_by_id.get(tid).cloned());
+
                         return Some(ToolEvent {
                             v: 1,
                             event_type: "tool.result".to_string(),
                             ts,
                             run_id: None,
                             id,
-                            tool: None,
+                            tool: tool,
                             action: Some(message.to_string()),
                             args: Value::Null,
                             ok,

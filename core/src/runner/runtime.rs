@@ -283,25 +283,27 @@ pub async fn run_session_runtime(
                                         preview = %e.line_preview
                                     );
                                 }
-                                match e.reason {
-                                    "invalid_json" => tracing::error!(
+                                if e.reason.starts_with("invalid_json") {
+                                    tracing::error!(
                                         error.kind="stream.parse_failed",
-                                        error.reason=e.reason,
+                                        error.reason=%e.reason,
                                         stream=?e.stream,
                                         line=%e.line_preview
-                                    ),
-                                    "non_json_line" => tracing::debug!(
+                                    );
+                                } else if e.reason == "non_json_line" {
+                                    tracing::debug!(
                                         error.kind="stream.parse_skipped",
-                                        error.reason=e.reason,
+                                        error.reason=%e.reason,
                                         stream=?e.stream,
                                         line=%e.line_preview
-                                    ),
-                                    _ => tracing::warn!(
+                                    );
+                                } else {
+                                    tracing::warn!(
                                         error.kind="stream.parse_failed",
-                                        error.reason=e.reason,
+                                        error.reason=%e.reason,
                                         stream=?e.stream,
                                         line=%e.line_preview
-                                    ),
+                                    );
                                 }
                             }
                         }

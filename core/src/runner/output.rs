@@ -42,7 +42,7 @@ pub enum OutputEvent {
 pub struct ParseError {
     pub stream: LineStream,
     pub line_preview: String,
-    pub reason: &'static str,
+    pub reason: String,
 }
 
 #[async_trait]
@@ -200,18 +200,18 @@ impl StreamParser for JsonlParser {
                 return Err(ParseError {
                     stream: tap.stream,
                     line_preview: truncate(&line, 240),
-                    reason: "non_json_line",
+                    reason: "non_json_line".to_string(),
                 });
             }
 
             let parsed = match Self::try_parse_one_json(buf) {
                 Ok(Some((v, consumed))) => (v, consumed),
                 Ok(None) => break, // need more data
-                Err(_) => {
+                Err(e) => {
                     return Err(ParseError {
                         stream: tap.stream,
                         line_preview: truncate(&String::from_utf8_lossy(buf), 240),
-                        reason: "invalid_json",
+                        reason: format!("invalid_json: {}", e),
                     });
                 }
             };
@@ -312,13 +312,13 @@ impl StreamParser for TextParser {
                     })
                     .collect())
             }
-            Err(_) => {
+            Err(e) => {
                 // Parsing failed; fall through to raw line output.
                 // If the line looks like a tool event (prefixed or JSON), report parse error.
                 Err(ParseError {
                     stream: tap.stream,
                     line_preview: truncate(&tap.line, 240),
-                    reason: "invalid_tool_event_line",
+                    reason: format!("invalid_tool_event_line: {}", e.reason),
                 })
             }
         }
