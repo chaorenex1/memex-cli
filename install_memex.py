@@ -189,7 +189,7 @@ def main():
 
         # Install memex-env scripts (optional)
         print("\n[INFO] Installing memex-env scripts...")
-        install_memex_env_scripts(Path(TMP), install_dir, VERSION, system)
+        install_memex_env_scripts(tmp, install_dir, version, system)
 
         # Update PATH
         if str(install_dir) not in os.environ.get("PATH", ""):

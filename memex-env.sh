@@ -48,21 +48,29 @@ show_help() {
 memex-env - Environment Variable Loader
 
 USAGE:
-    memex-env [ENVIRONMENT|COMMAND]
+    memex-env [ENVIRONMENT] [OPTIONS]
+
+OPTIONS:
+    -s, --source        Load in current shell (recommended)
+    -l, --list          List all available .env files
+    -h, --help          Show this help message
 
 COMMANDS:
     (none)          Load default .env file
     dev             Load .env.dev
     prod            Load .env.prod
     test            Load .env.test
-    list            List all available .env files
-    help            Show this help message
 
 EXAMPLES:
-    memex-env               # Load default .env
-    memex-env dev           # Load .env.dev
-    memex-env prod          # Load .env.prod
-    memex-env list          # List all .env files
+    memex-env                    # Load default .env in current shell
+    memex-env dev                # Load .env.dev in current shell
+    memex-env dev --source       # Load .env.dev (explicit)
+    memex-env prod -s            # Load .env.prod (explicit)
+    memex-env list               # List all .env files
+
+BEHAVIOR:
+    Loads environment variables into the CURRENT shell session.
+    Variables persist until you close the terminal window.
 
 ENVIRONMENT:
     MEMEX_DIR              Directory containing .env files (default: \$HOME/.memex)
@@ -74,6 +82,7 @@ FILES:
 SECURITY:
     - Files are validated for path traversal attacks
     - File permissions are checked (warns if world-writable)
+    - Protected system variables (PATH, HOME, etc.) are skipped
     - UTF-8 encoding is enforced
 
 EOF
@@ -186,105 +195,57 @@ get_env_file_path() {
     fi
 }
 
-load_env_file() {
+load_env_in_current_shell() {
     local env_file="$1"
-    local temp_script="$2"
 
-    print_info "Loading environment from: $env_file"
+    print_info "Loading environment in CURRENT shell..."
+    echo ""
 
-    # Set UTF-8 encoding
-    echo 'export LANG=en_US.UTF-8' >> "$temp_script"
-    echo 'export LC_ALL=en_US.UTF-8' >> "$temp_script"
+    # UTF-8 encoding
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
 
-    # Parse .env file safely
-    local line_num=0
+    # Protected system variables
+    local -a protected=("PATH" "HOME" "USER" "SHELL" "TERM" "PWD")
+    local count=0
+
+    # Load variables (simplified pattern)
     while IFS= read -r line || [[ -n "$line" ]]; do
-        ((line_num++))
-
         # Skip empty lines and comments
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
-        # Parse KEY=VALUE format
-        if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
+        # Simple validation: has '=' and non-empty key
+        [[ ! "$line" =~ = ]] && continue
 
-            # Remove surrounding quotes if present
-            value="${value#\"}"
-            value="${value%\"}"
-            value="${value#\'}"
-            value="${value%\'}"
+        # Split on first '='
+        IFS='=' read -r key value <<< "$line"
+        key=$(echo "$key" | xargs)
+        value=$(echo "$value" | xargs)
 
-            # Export to temp script (safely quoted)
-            echo "export ${key}=\"${value}\"" >> "$temp_script"
-        else
-            print_warning "Skipping invalid line $line_num: $line"
+        # Skip if empty key
+        [[ -z "$key" ]] && continue
+
+        # Check if variable is protected
+        if [[ " ${protected[@]} " =~ " ${key} " ]]; then
+            print_warning "Skipping protected: $key"
+            continue
         fi
+
+        # Export to current shell
+        export "${key}=${value}" 2>/dev/null && {
+            echo "  ${GREEN}✓${NC} $key"
+            ((count++))
+        }
     done < "$env_file"
 
-    print_success "Environment loaded successfully"
-}
+    echo ""
+    print_success "Loaded from: $env_file"
+    print_success "$count variables exported to CURRENT shell"
 
-create_startup_script() {
-    local env_file="$1"
-    local temp_script=$(mktemp /tmp/memex-env.XXXXXX.sh)
-
-    # Make script executable
-    chmod 700 "$temp_script"
-
-    # Add shebang
-    echo '#!/usr/bin/env bash' > "$temp_script"
-    echo '' >> "$temp_script"
-
-    # Load environment variables
-    load_env_file "$env_file" "$temp_script"
-
-    # Add welcome message
-    cat >> "$temp_script" << 'SCRIPT_EOF'
-
-# Display loaded environment
-echo ""
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  memex-env: Environment Variables Loaded                      ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Loaded from: ENV_FILE_PLACEHOLDER"
-echo "UTF-8 encoding: enabled"
-echo ""
-echo "Type 'exit' to return to the original shell"
-echo ""
-
-# Clean up this script on exit
-trap 'rm -f "TEMP_SCRIPT_PLACEHOLDER"' EXIT
-
-SCRIPT_EOF
-
-    # Replace placeholders
-    sed -i.bak "s|ENV_FILE_PLACEHOLDER|$env_file|g" "$temp_script"
-    sed -i.bak "s|TEMP_SCRIPT_PLACEHOLDER|$temp_script|g" "$temp_script"
-    rm -f "${temp_script}.bak"
-
-    echo "$temp_script"
-}
-
-start_new_shell() {
-    local startup_script="$1"
-
-    # Detect current shell
-    local current_shell=$(basename "$SHELL")
-
-    print_info "Starting new $current_shell session..."
-
-    # Start new shell with startup script
-    if [[ "$current_shell" == "zsh" ]]; then
-        exec zsh --rcs <(cat ~/.zshrc 2>/dev/null; cat "$startup_script")
-    elif [[ "$current_shell" == "bash" ]]; then
-        exec bash --rcfile <(cat ~/.bashrc 2>/dev/null; cat "$startup_script")
-    else
-        # Fallback: source the script in current shell
-        print_warning "Unknown shell '$current_shell', sourcing in current session"
-        source "$startup_script"
-    fi
+    # Set tracking variables
+    export MEMEX_ENV_LOADED="$(basename ${env_file})"
+    export MEMEX_ENV_FILE="$env_file"
+    export MEMEX_ENV_MODE="source"
 }
 
 # ============================================================================
@@ -295,24 +256,31 @@ main() {
     local env_name=""
 
     # Parse arguments
-    case "${1:-}" in
-        help|--help|-h)
-            show_help
-            exit 0
-            ;;
-        list|--list|-l)
-            list_env_files
-            exit 0
-            ;;
-        "")
-            # Use default .env
-            env_name=""
-            ;;
-        *)
-            # Use specified environment
-            env_name="$1"
-            ;;
-    esac
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            help|--help|-h)
+                show_help
+                exit 0
+                ;;
+            list|--list|-l)
+                list_env_files
+                exit 0
+                ;;
+            -s|--source)
+                # Explicit source mode (default behavior)
+                shift
+                ;;
+            -*)
+                print_error "Unknown option: $1"
+                print_info "Run 'memex-env --help' for usage"
+                exit 1
+                ;;
+            *)
+                env_name="$1"
+                shift
+                ;;
+        esac
+    done
 
     # Validate environment name
     if [[ -n "$env_name" ]]; then
@@ -321,20 +289,15 @@ main() {
         fi
     fi
 
-    # Get environment file path
+    # Get and validate environment file
     local env_file=$(get_env_file_path "$env_name")
-
-    # Validate environment file
     if ! validate_env_file "$env_file"; then
         print_info "Run 'memex-env list' to see available environments"
         exit 1
     fi
 
-    # Create startup script
-    local startup_script=$(create_startup_script "$env_file")
-
-    # Start new shell with environment loaded
-    start_new_shell "$startup_script"
+    # Load environment in current shell
+    load_env_in_current_shell "$env_file"
 }
 
 # ============================================================================

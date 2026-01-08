@@ -11,6 +11,9 @@ param(
     [string]$Environment = "",
 
     [Parameter()]
+    [switch]$Source,
+
+    [Parameter()]
     [switch]$List,
 
     [Parameter()]
@@ -49,21 +52,28 @@ function Show-Help {
 memex-env - Environment Variable Loader
 
 USAGE:
-    memex-env.ps1 [ENVIRONMENT|COMMAND]
+    memex-env.ps1 [ENVIRONMENT] [OPTIONS]
+
+OPTIONS:
+    -Source         Load in current session (recommended)
+    -List           List all available .env files
+    -Help           Show this help message
 
 COMMANDS:
     (none)          Load default .env file
     dev             Load .env.dev
     prod            Load .env.prod
     test            Load .env.test
-    -List           List all available .env files
-    -Help           Show this help message
 
 EXAMPLES:
-    .\memex-env.ps1               # Load default .env
-    .\memex-env.ps1 dev           # Load .env.dev
-    .\memex-env.ps1 prod          # Load .env.prod
-    .\memex-env.ps1 -List         # List all .env files
+    .\memex-env.ps1                   # Load default .env in current session
+    .\memex-env.ps1 dev               # Load .env.dev in current session
+    .\memex-env.ps1 dev -Source       # Load .env.dev (explicit)
+    .\memex-env.ps1 -List             # List all .env files
+
+BEHAVIOR:
+    Loads environment variables into the CURRENT PowerShell session.
+    Variables persist until you close the terminal window.
 
 ENVIRONMENT:
     USERPROFILE\.memex            Directory containing .env files
@@ -75,6 +85,7 @@ FILES:
 SECURITY:
     - Files are validated for path traversal attacks
     - Invalid variable names are rejected
+    - Protected system variables (PATH, USERPROFILE, etc.) are skipped
     - UTF-8 encoding is enforced
 
 "@
@@ -201,108 +212,46 @@ function Get-EnvFilePath {
     }
 }
 
-function Read-EnvFile {
+function Load-EnvInCurrentSession {
     param([string]$EnvFile)
 
-    Write-ColorOutput "Loading environment from: $EnvFile" -Type Info
+    Write-ColorOutput "Loading environment in CURRENT session..." -Type Info
+    Write-Host ""
 
-    $envVars = @{}
-    $lineNum = 0
+    # UTF-8 encoding
+    [Console]::OutputEncoding = [Text.UTF8Encoding]::UTF8
+    $OutputEncoding = [Text.UTF8Encoding]::UTF8
 
-    Get-Content -Path $EnvFile -Encoding UTF8 | ForEach-Object {
-        $lineNum++
-        $line = $_.Trim()
+    # Protected system variables
+    $protected = @("PATH", "HOME", "USERPROFILE", "TEMP", "TMP", "COMPUTERNAME", "USERNAME")
+    $script:count = 0
 
-        # Skip empty lines and comments
-        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith('#')) {
-            return
+    # Load variables (simplified pattern from start_with_env.ps1)
+    Get-Content $EnvFile -Encoding UTF8 |
+        Where-Object { $_ -match "^\s*[^#].+=.+$" } |
+        ForEach-Object {
+            $k, $v = ($_ -split "=", 2)
+            $k = $k.Trim()
+            $v = $v.Trim()
+
+            if ($protected -contains $k) {
+                Write-ColorOutput "Skipping protected: $k" -Type Warning
+                return
+            }
+
+            Set-Item -Path "env:$k" -Value $v
+            Write-Host "  ✓ $k" -ForegroundColor Green
+            $script:count++
         }
 
-        # Parse KEY=VALUE format
-        if ($line -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
-            $key = $matches[1]
-            $value = $matches[2]
+    Write-Host ""
+    Write-ColorOutput "Loaded from: $EnvFile" -Type Success
+    Write-ColorOutput "$script:count variables exported to CURRENT session" -Type Success
 
-            # Remove surrounding quotes if present
-            $value = $value -replace '^"(.*)"$', '$1'
-            $value = $value -replace "^'(.*)'$", '$1'
-
-            $envVars[$key] = $value
-        }
-        else {
-            Write-ColorOutput "Skipping invalid line $lineNum`: $line" -Type Warning
-        }
-    }
-
-    Write-ColorOutput "Environment loaded successfully" -Type Success
-
-    return $envVars
-}
-
-function Start-NewPowerShellSession {
-    param(
-        [hashtable]$EnvVars,
-        [string]$EnvFile
-    )
-
-    Write-ColorOutput "Starting new PowerShell session..." -Type Info
-
-    # Create a temporary startup script
-    $tempScript = [System.IO.Path]::GetTempFileName() + ".ps1"
-
-    # Build startup script content
-    $scriptContent = @"
-# Set UTF-8 encoding
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-`$OutputEncoding = [System.Text.Encoding]::UTF8
-
-# Set environment variables
-"@
-
-    foreach ($key in $EnvVars.Keys) {
-        $value = $EnvVars[$key]
-        $scriptContent += "`n`$env:$key = '$value'"
-    }
-
-    $scriptContent += @"
-
-
-# Display loaded environment
-Write-Host ""
-Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║  memex-env: Environment Variables Loaded                      ║" -ForegroundColor Cyan
-Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Loaded from: $EnvFile" -ForegroundColor Green
-Write-Host "UTF-8 encoding: enabled" -ForegroundColor Green
-Write-Host ""
-Write-Host "Type 'exit' to return to the original shell" -ForegroundColor Yellow
-Write-Host ""
-
-# Change to original directory
-Set-Location '$PWD'
-
-# Clean up temp script on exit
-Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
-    Remove-Item -Path '$tempScript' -Force -ErrorAction SilentlyContinue
-} | Out-Null
-
-"@
-
-    # Write script to temp file
-    Set-Content -Path $tempScript -Value $scriptContent -Encoding UTF8
-
-    # Start new PowerShell session with temp script
-    try {
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$tempScript`"" -WorkingDirectory $PWD
-        Write-ColorOutput "New PowerShell session started successfully" -Type Success
-        exit 0
-    }
-    catch {
-        Write-ColorOutput "Failed to start new PowerShell session: $_" -Type Error
-        Remove-Item -Path $tempScript -Force -ErrorAction SilentlyContinue
-        exit 1
-    }
+    # Set tracking variables
+    $env:MEMEX_ENV_LOADED = Split-Path -Leaf $EnvFile
+    $env:MEMEX_ENV_FILE = $EnvFile
+    $env:MEMEX_ENV_MODE = "source"
 }
 
 # ============================================================================
@@ -329,20 +278,17 @@ function Main {
         }
     }
 
-    # Get environment file path
+    # Get and validate environment file
     $envFile = Get-EnvFilePath -EnvName $Environment
-
-    # Validate environment file
     if (-not (Test-EnvFile -FilePath $envFile)) {
-        Write-ColorOutput "Run 'memex-env.ps1 -List' to see available environments" -Type Info
+        $sq = [char]39
+        $msg = 'Run ' + $sq + 'memex-env.ps1 -List' + $sq + ' to see available environments'
+        Write-ColorOutput $msg -Type Info
         exit 1
     }
 
-    # Read environment variables
-    $envVars = Read-EnvFile -EnvFile $envFile
-
-    # Start new PowerShell session
-    Start-NewPowerShellSession -EnvVars $envVars -EnvFile $envFile
+    # Load environment in current session
+    Load-EnvInCurrentSession -EnvFile $envFile
 }
 
 # ============================================================================
