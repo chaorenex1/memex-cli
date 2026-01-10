@@ -1,4 +1,22 @@
+# Memex-CLI Configuration Template
+#
+# This is an EXAMPLE configuration file showing all available options with their DEFAULT values.
+# Values shown here match the defaults in core/src/config/types.rs (Single Source of Truth).
+#
+# Configuration loading priority:
+#   1. ~/.memex/config.toml (highest priority)
+#   2. ./config.toml (current directory)
+#   3. Built-in defaults (if no config file exists)
+#
+# You can:
+#   - Copy this file to ~/.memex/config.toml and customize it
+#   - Omit any section to use built-in defaults
+#   - Override specific values while keeping others at default
+#
+# NOTE: All values below are DEFAULTS. Delete or comment out sections you don't need to change.
+
 [control]
+# Default values (defined in core/src/config/types.rs)
 fail_mode = "closed"
 decision_timeout_ms = 300000
 abort_grace_ms = 5000
@@ -8,15 +26,17 @@ control_writer_error_capacity = 1
 tick_interval_ms = 1000
 
 [logging]
-# EnvFilter 格式："info" / "debug" / "memex_core=debug,memex_cli=debug" 等。
+# Default values (defined in core/src/config/types.rs)
+# EnvFilter format: "info" / "debug" / "memex_core=debug,memex_cli=debug", etc.
 level = "info"
-# 是否输出到 stderr
+# Output to stderr
 console = true
-# 是否输出到文件（默认写入系统临时目录）
+# Output to file (defaults to system temp directory)
 file = true
-# directory = ""  # 为空/未设置时使用系统临时目录
+# directory = ""  # Empty/unset = use system temp directory
 
 [policy]
+# Default values (defined in core/src/config/types.rs)
 provider = "config"
 mode = "auto"
 default_action = "deny"
@@ -32,6 +52,7 @@ allowlist = [
 ]
 
 [memory]
+# Default values (defined in core/src/config/types.rs)
 provider = "service"
 enabled = true
 base_url = "https://memory.internal"
@@ -41,12 +62,14 @@ search_limit = 6
 min_score = 0.2
 
 [prompt_inject]
-placement = "system" # system|user
+# Default values (defined in core/src/config/types.rs)
+placement = "system" # Options: system | user
 max_items = 3
 max_answer_chars = 900
 include_meta_line = true
 
 [gatekeeper]
+# Default values (defined in core/src/config/types.rs)
 provider = "standard"
 max_inject = 3
 min_trust_show = 0.40
@@ -60,6 +83,7 @@ exclude_stale_by_default = true
 active_statuses = ["active", "verified"]
 
 [candidate_extract]
+# Default values (defined in core/src/config/types.rs)
 max_candidates = 1
 max_answer_chars = 1200
 min_answer_chars = 200
@@ -72,12 +96,14 @@ strict_secret_block = true
 confidence = 0.45
 
 [events_out]
+# Default values (defined in core/src/config/types.rs)
 enabled = false
 path = "./run.events.jsonl"
 channel_capacity = 2048
 drop_when_full = true
 
 [tui]
+# Default values (defined in core/src/config/types.rs)
 enabled = true
 auto_scroll = true
 show_splash = true
@@ -86,3 +112,20 @@ splash_animation = true
 update_interval_ms = 50
 max_tool_events = 1000
 max_output_lines = 10000
+
+[http_server]
+# Default values (defined in core/src/config/types.rs)
+host = "127.0.0.1"
+port = 8080
+
+[stdio]
+# Default values (defined in core/src/config/types.rs)
+max_parallel_tasks = 4               # Base concurrency (recommend half of CPU cores)
+enable_adaptive_concurrency = true   # Enable dynamic scheduling (Level 2.2)
+enable_event_buffering = true        # Enable event batching (Level 2.1)
+event_buffer_size = 50               # Event buffer size
+event_flush_interval_ms = 100        # Flush interval (milliseconds)
+enable_file_cache = false            # File cache (default off to avoid memory usage)
+file_cache_size = 100                # Cache entries count
+enable_mmap_large_files = true       # Use mmap for large files (Level 3.1)
+mmap_threshold_mb = 10               # mmap threshold (MB)
