@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::collections::HashMap;
 
 use memex_core::api as core_api;
 
@@ -25,17 +24,18 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         "codecli"
     }
 
-    fn plan(
-        &self,
-        backend: &str,
-        base_envs: HashMap<String, String>,
-        resume_id: Option<String>,
-        prompt: String,
-        model: Option<String>,
-        model_provider: Option<String>,
-        project_id: Option<String>,
-        stream_format: &str,
-    ) -> Result<core_api::BackendPlan> {
+    fn plan(&self, request: core_api::BackendPlanRequest) -> Result<core_api::BackendPlan> {
+        let core_api::BackendPlanRequest {
+            backend,
+            base_envs,
+            resume_id,
+            prompt,
+            model,
+            model_provider,
+            project_id,
+            stream_format,
+        } = request;
+
         // 预处理 prompt，防止特殊字符被 shell 截断
         let prompt = sanitize_prompt(&prompt);
 
@@ -50,11 +50,11 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         );
 
         // 解析可执行文件完整路径
-        let exe_path = resolve_executable_path(backend)?;
+        let exe_path = resolve_executable_path(&backend)?;
         tracing::info!("Resolved executable path: {}", exe_path);
 
         // 提取命令类型用于判断参数格式（codex/claude/gemini）
-        let cmd_type = extract_command_type(backend);
+        let cmd_type = extract_command_type(&backend);
 
         let cwd = if !cmd_type.contains("codex") {
             project_id

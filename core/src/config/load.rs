@@ -62,7 +62,7 @@ pub fn load_default() -> anyhow::Result<AppConfig> {
     // Environment variable overrides (Priority 0: highest)
     if let Ok(v) = std::env::var("MEM_CODECLI_BACKEND_KIND") {
         if !v.trim().is_empty() {
-            cfg.backend_kind = v;
+            cfg.backend_kind = v.parse().unwrap_or_default();
         }
     }
 

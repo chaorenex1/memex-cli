@@ -6,6 +6,24 @@ pub enum BackendKind {
     Aiservice,
 }
 
+impl From<BackendKind> for memex_core::api::BackendKind {
+    fn from(kind: BackendKind) -> Self {
+        match kind {
+            BackendKind::Codecli => memex_core::api::BackendKind::Codecli,
+            BackendKind::Aiservice => memex_core::api::BackendKind::Aiservice,
+        }
+    }
+}
+
+impl From<memex_core::api::BackendKind> for BackendKind {
+    fn from(kind: memex_core::api::BackendKind) -> Self {
+        match kind {
+            memex_core::api::BackendKind::Codecli => BackendKind::Codecli,
+            memex_core::api::BackendKind::Aiservice => BackendKind::Aiservice,
+        }
+    }
+}
+
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskLevel {
     Auto,
@@ -189,8 +207,8 @@ pub struct RecordSessionArgs {
     #[arg(long)]
     pub transcript: String,
 
-    /// Session ID
-    #[arg(long)]
+    /// Session ID (internally treated as run_id for execution tracking)
+    #[arg(long, alias = "run-id")]
     pub session_id: String,
 
     /// Project ID (defaults to config)
@@ -202,13 +220,65 @@ pub struct RecordSessionArgs {
     pub extract_only: bool,
 }
 
+#[derive(ClapArgs, Debug, Clone)]
+pub struct HttpServerArgs {
+    /// Server port
+    #[arg(long, default_value_t = 8080)]
+    pub port: u16,
+
+    /// Server host
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+
+    /// Project ID (defaults to config)
+    #[arg(long)]
+    pub project_id: Option<String>,
+
+    /// Session ID (defaults to generated UUID)
+    #[arg(long)]
+    pub session_id: Option<String>,
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
+    Stdio(StdioArgs),
     Replay(ReplayArgs),
     Resume(ResumeArgs),
     Search(SearchArgs),
     RecordCandidate(RecordCandidateArgs),
     RecordHit(RecordHitArgs),
     RecordSession(RecordSessionArgs),
+    HttpServer(HttpServerArgs),
+}
+
+#[derive(ClapArgs, Debug, Clone)]
+pub struct StdioArgs {
+    /// Read STDIO tasks from file (defaults to stdin)
+    #[arg(long)]
+    pub input_file: Option<String>,
+
+    /// Default stream format override (task-level can override)
+    #[arg(long, default_value = "text")]
+    pub stream_format: String,
+
+    /// Use ASCII markers in text output
+    #[arg(long, default_value_t = false)]
+    pub ascii: bool,
+
+    /// Verbose status output (text mode only)
+    #[arg(long, default_value_t = false)]
+    pub verbose: bool,
+
+    /// Quiet output (text mode only; prints assistant output only)
+    #[arg(long, default_value_t = false)]
+    pub quiet: bool,
+
+    /// Resume from a previous run (requires --run-id and --events-file)
+    #[arg(long)]
+    pub run_id: Option<String>,
+
+    /// Events file to load context from (for resume)
+    #[arg(long)]
+    pub events_file: Option<String>,
 }

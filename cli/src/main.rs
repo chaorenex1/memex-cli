@@ -1,12 +1,7 @@
 //! CLI 二进制入口：解析命令行参数、加载配置、初始化 tracing，并把控制权交给 `app`/`commands`。
 use clap::Parser;
-mod app;
-mod commands;
-mod flow;
-mod task_level;
-mod tui;
-use commands::cli;
 use core_api::{AppContext, CliError, RunnerError};
+use memex_cli::commands::cli;
 use memex_core::api as core_api;
 use memex_plugins::services::PluginServicesFactory;
 use std::sync::Arc;
@@ -99,7 +94,8 @@ fn exit_code_for_error(e: &CliError) -> i32 {
 async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Result<i32, CliError> {
     match cmd {
         cli::Commands::Run(run_args) => {
-            let exit = app::run_app_with_config(args, Some(run_args), None, &ctx).await?;
+            let exit =
+                memex_cli::app::run_app_with_config(args, Some(run_args), None, &ctx).await?;
             Ok(exit)
         }
         cli::Commands::Replay(replay_args) => {
@@ -115,25 +111,40 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
         }
         cli::Commands::Resume(resume_args) => {
             let recover_id = Some(resume_args.run_id.clone());
-            let exit = app::run_app_with_config(args, Some(resume_args.run_args), recover_id, &ctx)
-                .await?;
+            let exit = memex_cli::app::run_app_with_config(
+                args,
+                Some(resume_args.run_args),
+                recover_id,
+                &ctx,
+            )
+            .await?;
             Ok(exit)
         }
         cli::Commands::Search(search_args) => {
-            commands::memory::handle_search(search_args, &ctx).await?;
+            memex_cli::commands::memory::handle_search(search_args, &ctx).await?;
             Ok(0)
         }
         cli::Commands::RecordCandidate(record_args) => {
-            commands::memory::handle_record_candidate(record_args, &ctx).await?;
+            memex_cli::commands::memory::handle_record_candidate(record_args, &ctx).await?;
             Ok(0)
         }
         cli::Commands::RecordHit(hit_args) => {
-            commands::memory::handle_record_hit(hit_args, &ctx).await?;
+            memex_cli::commands::memory::handle_record_hit(hit_args, &ctx).await?;
             Ok(0)
         }
         cli::Commands::RecordSession(session_args) => {
-            commands::memory::handle_record_session(session_args, &ctx).await?;
+            memex_cli::commands::memory::handle_record_session(session_args, &ctx).await?;
             Ok(0)
+        }
+        cli::Commands::HttpServer(http_args) => {
+            memex_cli::commands::http_server::handle_http_server(http_args, &ctx).await?;
+            Ok(0)
+        }
+        cli::Commands::Stdio(stdio_args) => {
+            let exit =
+                memex_cli::commands::stdio::handle_stdio(stdio_args, args.capture_bytes, &ctx)
+                    .await?;
+            Ok(exit)
         }
     }
 }
