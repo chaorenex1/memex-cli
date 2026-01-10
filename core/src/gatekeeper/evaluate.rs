@@ -162,10 +162,7 @@ impl Gatekeeper {
 
         reasons.push(format!(
             "filtered: usable={}, status_reject={}, stale_reject={}, fail_reject={}",
-            usable_count,
-            status_reject,
-            stale_count,
-            fail_reject
+            usable_count, status_reject, stale_count, fail_reject
         ));
 
         reasons.push(format!(

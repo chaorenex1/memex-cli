@@ -5,8 +5,8 @@
 pub use crate::backend::{BackendPlan, BackendPlanRequest, BackendStrategy};
 pub use crate::config::{
     load_default, AppConfig, BackendKind, ControlConfig, GatekeeperProvider, HttpServerConfig,
-    LoggingConfig, MemoryProvider, PolicyConfig, PolicyProvider, PolicyRule,
-    PromptInjectPlacement, RunnerConfig, TuiConfig,
+    LoggingConfig, MemoryProvider, PolicyConfig, PolicyProvider, PolicyRule, PromptInjectPlacement,
+    RunnerConfig, TuiConfig,
 };
 pub use crate::context::{AppContext, Services, ServicesFactory};
 pub use crate::engine::{run_with_query, RunSessionInput, RunWithQueryArgs, RunnerSpec};

@@ -28,10 +28,7 @@ impl HttpClient {
         }
     }
 
-    pub async fn search(
-        &self,
-        payload: core_api::QASearchPayload,
-    ) -> anyhow::Result<Value> {
+    pub async fn search(&self, payload: core_api::QASearchPayload) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/search", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",
@@ -54,10 +51,7 @@ impl HttpClient {
         Ok(v)
     }
 
-    pub async fn send_hit(
-        &self,
-        payload: core_api::QAHitsPayload,
-    ) -> anyhow::Result<Value> {
+    pub async fn send_hit(&self, payload: core_api::QAHitsPayload) -> anyhow::Result<Value> {
         let url = format!("{}/v1/qa/hit", self.base_url.trim_end_matches('/'));
         let used = payload
             .references
