@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::Local;
 
 use crate::gatekeeper::GatekeeperDecision;
 
@@ -42,7 +42,7 @@ pub fn build_validate_payloads(
             signal_strength: Some(p.signal_strength.clone()),
             strong_signal: Some(p.strong_signal),
             context: p.context.clone(),
-            ts: Some(Utc::now().to_rfc3339()),
+            ts: Some(Local::now().to_rfc3339()),
             payload: Some(p.payload.clone()),
             source: Some("mem-codecli".to_string()),
             client: None,

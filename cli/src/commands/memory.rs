@@ -235,9 +235,8 @@ pub async fn handle_record_session(
     });
 
     // Read transcript file
-    let transcript_content = std::fs::read_to_string(&args.transcript).map_err(|e| {
-        core_api::CliError::Command(format!("Failed to read transcript: {}", e))
-    })?;
+    let transcript_content = std::fs::read_to_string(&args.transcript)
+        .map_err(|e| core_api::CliError::Command(format!("Failed to read transcript: {}", e)))?;
 
     // Parse JSONL
     let mut tool_events: Vec<core_api::ToolEvent> = Vec::new();

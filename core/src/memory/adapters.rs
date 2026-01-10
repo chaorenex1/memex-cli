@@ -85,28 +85,28 @@ impl From<SearchMatchCompat> for SearchMatch {
 }
 
 pub fn parse_search_matches(v: &Value) -> Result<Vec<SearchMatch>, String> {
-    let arr = v
-        .as_array()
-        .ok_or_else(|| {
-            // 检查是否为错误响应
-            if let Some(err_msg) = v.get("error").and_then(|e| e.as_str()) {
-                tracing::warn!(
-                    target: "memex.qa",
-                    "API returned error response: {}",
-                    err_msg
-                );
-                return format!("API returned error: {}", err_msg);
-            }
-            let response_preview = serde_json::to_string(v)
-                .unwrap_or_else(|_| "non-serializable".to_string());
-            tracing::error!(
+    let arr = v.as_array().ok_or_else(|| {
+        // 检查是否为错误响应
+        if let Some(err_msg) = v.get("error").and_then(|e| e.as_str()) {
+            tracing::warn!(
                 target: "memex.qa",
-                "Invalid API response format: expected array, got {}",
-                response_preview
+                "API returned error response: {}",
+                err_msg
             );
-            format!("search response must be top-level array (List[Dict]), got: {}",
-                    response_preview)
-        })?;
+            return format!("API returned error: {}", err_msg);
+        }
+        let response_preview =
+            serde_json::to_string(v).unwrap_or_else(|_| "non-serializable".to_string());
+        tracing::error!(
+            target: "memex.qa",
+            "Invalid API response format: expected array, got {}",
+            response_preview
+        );
+        format!(
+            "search response must be top-level array (List[Dict]), got: {}",
+            response_preview
+        )
+    })?;
 
     tracing::debug!(
         target: "memex.qa",
@@ -135,7 +135,7 @@ pub fn parse_search_matches(v: &Value) -> Result<Vec<SearchMatch>, String> {
                     preview_truncated
                 );
                 errs.push(format!("#{}: {}", i, e))
-            },
+            }
         }
     }
 

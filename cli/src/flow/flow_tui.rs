@@ -145,6 +145,7 @@ pub async fn run_tui_flow(
                                                     wrapper_start_data: start_data,
                                                 },
                                                 |input| async move {
+                                                    let backend_kind_str = input.backend_kind.to_string();
                                                     core_api::run_session(RunSessionArgs {
                                                         session: input.session,
                                                         control: &input.control,
@@ -153,7 +154,7 @@ pub async fn run_tui_flow(
                                                         events_out: input.events_out_tx,
                                                         event_tx: Some(runner_tx),
                                                         run_id: &input.run_id,
-                                                        backend_kind: &input.backend_kind,
+                                                        backend_kind: &backend_kind_str,
                                                         stream_format: &input.stream_format,
                                                         abort_rx: Some(abort_rx),
                                                     })
@@ -283,10 +284,7 @@ async fn build_plan_request(
 ) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
-            let backend_kind = ra.backend_kind.map(|kind| match kind {
-                crate::commands::cli::BackendKind::Codecli => "codecli".to_string(),
-                crate::commands::cli::BackendKind::Aiservice => "aiservice".to_string(),
-            });
+            let backend_kind = ra.backend_kind.map(Into::into);
 
             if ra.backend == "codex" && ra.model_provider.is_some() {
                 let task_grade_result = infer_task_level(

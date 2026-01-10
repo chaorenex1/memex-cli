@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::backend::BackendStrategy;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, BackendKind};
 use crate::context::Services;
 use crate::events_out::EventsOutTx;
 use crate::runner::{PolicyPlugin, RunnerPlugin, RunnerSession, RunnerStartArgs};
@@ -14,7 +14,7 @@ pub struct RunSessionInput {
     pub policy: Option<Arc<dyn PolicyPlugin>>,
     pub capture_bytes: usize,
     pub events_out_tx: Option<EventsOutTx>,
-    pub backend_kind: String,
+    pub backend_kind: BackendKind,
     pub stream_format: String,
 }
 
