@@ -9,19 +9,21 @@ pub struct BackendPlan {
     pub session_args: RunnerStartArgs,
 }
 
+/// Request parameters for backend planning
+#[derive(Debug, Clone)]
+pub struct BackendPlanRequest {
+    pub backend: String,
+    pub base_envs: HashMap<String, String>,
+    pub resume_id: Option<String>,
+    pub prompt: String,
+    pub model: Option<String>,
+    pub model_provider: Option<String>,
+    pub project_id: Option<String>,
+    pub stream_format: String,
+}
+
 pub trait BackendStrategy: Send + Sync {
     fn name(&self) -> &str;
 
-    #[allow(clippy::too_many_arguments)]
-    fn plan(
-        &self,
-        backend: &str,
-        base_envs: HashMap<String, String>,
-        resume_id: Option<String>,
-        prompt: String,
-        model: Option<String>,
-        model_provider: Option<String>,
-        project_id: Option<String>,
-        stream_format: &str,
-    ) -> Result<BackendPlan>;
+    fn plan(&self, request: BackendPlanRequest) -> Result<BackendPlan>;
 }

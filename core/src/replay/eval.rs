@@ -45,7 +45,7 @@ pub fn rerun_gatekeeper_for_run(
 
     let outcome = build_run_outcome_from_exit(run);
 
-    let now = chrono::Utc::now();
+    let now = chrono::Local::now();
     let decision = Gatekeeper::evaluate(gk_cfg, now, &matches, &outcome, &run.tool_events);
 
     GatekeeperReplayResult {

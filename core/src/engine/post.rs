@@ -51,12 +51,15 @@ pub(crate) async fn post_run(
         used = run_outcome.used_qa_ids.len()
     );
 
-    let decision =
-        ctx.gatekeeper
-            .evaluate(chrono::Utc::now(), matches, &run_outcome, &run.tool_events);
+    let decision = ctx.gatekeeper.evaluate(
+        chrono::Local::now(),
+        matches,
+        &run_outcome,
+        &run.tool_events,
+    );
 
     let mut decision_event =
-        WrapperEvent::new("gatekeeper.decision", chrono::Utc::now().to_rfc3339());
+        WrapperEvent::new("gatekeeper.decision", chrono::Local::now().to_rfc3339());
     decision_event.run_id = Some(run.run_id.clone());
     decision_event.data = Some(serde_json::json!({
         "decision": serde_json::to_value(&decision).unwrap_or(serde_json::Value::Null),
@@ -111,17 +114,33 @@ pub(crate) async fn post_run(
                 shown = shown,
                 used = used
             );
-            let _ = mem.record_hit(hit_payload).await;
+            if let Err(e) = mem.record_hit(hit_payload).await {
+                tracing::warn!(
+                    target: "memex.qa",
+                    stage = "memory.hit.error",
+                    error = %e,
+                    "Failed to record memory hit (non-fatal)"
+                );
+            }
             tracing::debug!(target: "memex.qa", stage = "memory.hit.out");
         }
         for v in build_validate_payloads(ctx.project_id, &decision) {
+            let qa_id = v.qa_id.clone();
             tracing::debug!(
                 target: "memex.qa",
                 stage = "memory.validate.in",
-                qa_id = %v.qa_id,
+                qa_id = %qa_id,
                 result = ?v.result
             );
-            let _ = mem.record_validation(v).await;
+            if let Err(e) = mem.record_validation(v).await {
+                tracing::warn!(
+                    target: "memex.qa",
+                    stage = "memory.validate.error",
+                    qa_id = %qa_id,
+                    error = %e,
+                    "Failed to record validation (non-fatal)"
+                );
+            }
             tracing::debug!(target: "memex.qa", stage = "memory.validate.out");
         }
         if decision.should_write_candidate && !candidate_drafts.is_empty() {
@@ -132,7 +151,14 @@ pub(crate) async fn post_run(
                     stage = "memory.candidate.in",
                     tags = c.tags.len()
                 );
-                let _ = mem.record_candidate(c).await;
+                if let Err(e) = mem.record_candidate(c).await {
+                    tracing::warn!(
+                        target: "memex.qa",
+                        stage = "memory.candidate.error",
+                        error = %e,
+                        "Failed to record candidate (non-fatal)"
+                    );
+                }
                 tracing::debug!(target: "memex.qa", stage = "memory.candidate.out");
             }
         }

@@ -1,7 +1,7 @@
 //! 引擎主入口：把一次“用户 query”编排为 pre-run（记忆检索/注入）→ runner 执行 → post-run（gatekeeper/回写）。
 use std::future::Future;
 
-use chrono::Utc;
+use chrono::Local;
 
 use crate::backend::BackendPlan;
 use crate::error::RunnerError;
@@ -97,14 +97,15 @@ where
         matches.len()
     );
 
-    // Buffer early wrapper events until we learn the effective run_id (session_id).
+    // Buffer early wrapper events until we learn the effective run_id.
+    // Note: Some backends (e.g., Gemini) return "session_id" which is treated as run_id.
     // This keeps IDs consistent across the whole wrapper-event stream.
     let mut pending_wrapper_events: Vec<WrapperEvent> = Vec::new();
     if let Some(ev) = memory_search_event {
         pending_wrapper_events.push(ev);
     }
 
-    let mut start_event = WrapperEvent::new("run.start", Utc::now().to_rfc3339());
+    let mut start_event = WrapperEvent::new("run.start", Local::now().to_rfc3339());
     start_event.data = wrapper_start_data;
     pending_wrapper_events.push(start_event);
 
@@ -163,7 +164,7 @@ where
         policy,
         capture_bytes,
         events_out_tx: events_out_tx.clone(),
-        backend_kind: cfg.backend_kind.clone(),
+        backend_kind: cfg.backend_kind,
         stream_format: stream_format.clone(),
     };
 
@@ -190,7 +191,7 @@ where
     }
 
     if run_result.dropped_lines > 0 {
-        let mut ev = WrapperEvent::new("tee.drop", Utc::now().to_rfc3339());
+        let mut ev = WrapperEvent::new("tee.drop", Local::now().to_rfc3339());
         ev.run_id = Some(effective_run_id.clone());
         ev.data = Some(serde_json::json!({ "dropped_lines": run_result.dropped_lines }));
         write_wrapper_event(events_out_tx.as_ref(), &ev).await;
@@ -207,7 +208,7 @@ where
     let (run_outcome, _decision) =
         post_run(&post_ctx, &run_result, &matches, shown_qa_ids, &user_query).await?;
 
-    let mut exit_event = WrapperEvent::new("run.end", Utc::now().to_rfc3339());
+    let mut exit_event = WrapperEvent::new("run.end", Local::now().to_rfc3339());
     exit_event.run_id = Some(effective_run_id);
     exit_event.data = Some(serde_json::json!({
         "exit_code": run_outcome.exit_code,
@@ -237,20 +238,22 @@ fn build_runner_and_args(
             project_id,
             stream_format,
         } => {
+            let request = crate::backend::BackendPlanRequest {
+                backend: backend_spec,
+                base_envs,
+                resume_id,
+                prompt: merged_query,
+                model,
+                model_provider,
+                project_id,
+                stream_format,
+            };
+
             let BackendPlan {
                 runner,
                 session_args,
             } = strategy
-                .plan(
-                    &backend_spec,
-                    base_envs,
-                    resume_id,
-                    merged_query,
-                    model,
-                    model_provider,
-                    project_id,
-                    &stream_format,
-                )
+                .plan(request)
                 .map_err(|e| RunnerError::Spawn(e.to_string()))?;
             Ok((runner, session_args))
         }

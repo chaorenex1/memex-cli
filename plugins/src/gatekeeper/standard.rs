@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use memex_core::api as core_api;
 
 pub struct StandardGatekeeperPlugin {
@@ -16,9 +16,13 @@ impl core_api::GatekeeperPlugin for StandardGatekeeperPlugin {
         "standard"
     }
 
+    fn prepare_inject(&self, matches: &[core_api::SearchMatch]) -> Vec<core_api::InjectItem> {
+        core_api::prepare_inject_list(&self.config, matches)
+    }
+
     fn evaluate(
         &self,
-        now: DateTime<Utc>,
+        now: DateTime<Local>,
         matches: &[core_api::SearchMatch],
         outcome: &core_api::RunOutcome,
         events: &[core_api::ToolEvent],

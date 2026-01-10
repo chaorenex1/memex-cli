@@ -21,7 +21,13 @@ fn audit_preview(s: &str) -> String {
     if s.len() <= MAX {
         return s.to_string();
     }
-    let mut out = s[..MAX].to_string();
+    let end = s
+        .char_indices()
+        .take_while(|(i, _)| *i < MAX)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let mut out = s[..end].to_string();
     out.push('…');
     out
 }
@@ -36,7 +42,7 @@ pub enum OutputEvent {
 pub struct ParseError {
     pub stream: LineStream,
     pub line_preview: String,
-    pub reason: &'static str,
+    pub reason: String,
 }
 
 #[async_trait]
@@ -194,18 +200,18 @@ impl StreamParser for JsonlParser {
                 return Err(ParseError {
                     stream: tap.stream,
                     line_preview: truncate(&line, 240),
-                    reason: "non_json_line",
+                    reason: "non_json_line".to_string(),
                 });
             }
 
             let parsed = match Self::try_parse_one_json(buf) {
                 Ok(Some((v, consumed))) => (v, consumed),
                 Ok(None) => break, // need more data
-                Err(_) => {
+                Err(e) => {
                     return Err(ParseError {
                         stream: tap.stream,
                         line_preview: truncate(&String::from_utf8_lossy(buf), 240),
-                        reason: "invalid_json",
+                        reason: format!("invalid_json: {}", e),
                     });
                 }
             };
@@ -306,13 +312,13 @@ impl StreamParser for TextParser {
                     })
                     .collect())
             }
-            Err(_) => {
+            Err(e) => {
                 // Parsing failed; fall through to raw line output.
                 // If the line looks like a tool event (prefixed or JSON), report parse error.
                 Err(ParseError {
                     stream: tap.stream,
                     line_preview: truncate(&tap.line, 240),
-                    reason: "invalid_tool_event_line",
+                    reason: format!("invalid_tool_event_line: {}", e.reason),
                 })
             }
         }
@@ -403,7 +409,14 @@ impl StdioSink {
         if s.len() <= MAX {
             return s.to_string();
         }
-        let mut out = s[..MAX].to_string();
+        // 找到不超过 MAX 的最近字符边界
+        let end = s
+            .char_indices()
+            .take_while(|(i, _)| *i < MAX)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(0);
+        let mut out = s[..end].to_string();
         out.push('…');
         out
     }
@@ -486,7 +499,13 @@ fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }
-    let mut out = s[..max].to_string();
+    let end = s
+        .char_indices()
+        .take_while(|(i, _)| *i < max)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let mut out = s[..end].to_string();
     out.push('…');
     out
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::Utc;
+use chrono::Local;
 
 use serde_json::Value;
 
@@ -23,7 +23,7 @@ impl StreamJsonToolEventParser {
     }
 
     pub fn parse_value(&mut self, v: &Value) -> Option<ToolEvent> {
-        let ts = Some(Utc::now().to_rfc3339());
+        let ts = Some(Local::now().to_rfc3339());
         // Claude stream-json
         // Shape examples (simplified):
         // - {"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite","input":{...}}]}}
@@ -87,6 +87,10 @@ impl StreamJsonToolEventParser {
                             .map(|x| x.to_string());
                         let args = item.get("input").cloned().unwrap_or(Value::Null);
                         let name = item.get("name").and_then(|x| x.as_str());
+
+                        if let (Some(id), Some(tool)) = (id.clone(), tool.clone()) {
+                            self.pending_tool_name_by_id.insert(id, tool);
+                        }
 
                         return Some(ToolEvent {
                             v: 1,
@@ -187,13 +191,17 @@ impl StreamJsonToolEventParser {
                             .cloned()
                             .or_else(|| v.get("tool_use_result").cloned());
 
+                        let tool = id
+                            .as_ref()
+                            .and_then(|tid| self.pending_tool_name_by_id.get(tid).cloned());
+
                         return Some(ToolEvent {
                             v: 1,
                             event_type: "tool.result".to_string(),
                             ts,
                             run_id: None,
                             id,
-                            tool: None,
+                            tool,
                             action: Some(message.to_string()),
                             args: Value::Null,
                             ok,

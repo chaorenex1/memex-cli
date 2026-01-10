@@ -1,9 +1,41 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::FromStr;
+
+/// Backend execution strategy
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum BackendKind {
+    #[default]
+    Codecli,
+    Aiservice,
+}
+
+impl fmt::Display for BackendKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BackendKind::Codecli => write!(f, "codecli"),
+            BackendKind::Aiservice => write!(f, "aiservice"),
+        }
+    }
+}
+
+impl FromStr for BackendKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "codecli" => Ok(BackendKind::Codecli),
+            "aiservice" => Ok(BackendKind::Aiservice),
+            _ => Err(format!("Unknown backend kind: {}", s)),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    #[serde(default = "default_backend_kind")]
-    pub backend_kind: String,
+    #[serde(default)]
+    pub backend_kind: BackendKind,
 
     #[serde(default)]
     pub env_file: String,
@@ -37,10 +69,12 @@ pub struct AppConfig {
 
     #[serde(default)]
     pub gatekeeper: GatekeeperConfig,
-}
 
-fn default_backend_kind() -> String {
-    "codecli".to_string()
+    #[serde(default)]
+    pub http_server: HttpServerConfig,
+
+    #[serde(default)]
+    pub stdio: StdioConfig,
 }
 
 fn default_env_file() -> String {
@@ -50,7 +84,7 @@ fn default_env_file() -> String {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            backend_kind: default_backend_kind(),
+            backend_kind: BackendKind::default(),
             env_file: default_env_file(),
             logging: LoggingConfig::default(),
             tui: TuiConfig::default(),
@@ -62,6 +96,8 @@ impl Default for AppConfig {
             runner: RunnerConfig::default(),
             events_out: EventsOutConfig::default(),
             gatekeeper: GatekeeperConfig::default(),
+            http_server: HttpServerConfig::default(),
+            stdio: StdioConfig::default(),
         }
     }
 }
@@ -689,6 +725,125 @@ impl Default for GatekeeperConfig {
     fn default() -> Self {
         Self {
             provider: default_gatekeeper_provider(),
+        }
+    }
+}
+
+// ============= HTTP Server Config =============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HttpServerConfig {
+    #[serde(default = "default_http_server_host")]
+    pub host: String,
+
+    #[serde(default = "default_http_server_port")]
+    pub port: u16,
+}
+
+fn default_http_server_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_http_server_port() -> u16 {
+    8080
+}
+
+impl Default for HttpServerConfig {
+    fn default() -> Self {
+        Self {
+            host: default_http_server_host(),
+            port: default_http_server_port(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StdioConfig {
+    /// 最大并行任务数
+    #[serde(default = "default_max_parallel_tasks")]
+    pub max_parallel_tasks: usize,
+
+    /// 启用自适应并发调度（Level 2.2）
+    #[serde(default = "default_enable_adaptive_concurrency")]
+    pub enable_adaptive_concurrency: bool,
+
+    /// 启用事件批量化输出（Level 2.1）
+    #[serde(default = "default_enable_event_buffering")]
+    pub enable_event_buffering: bool,
+
+    /// 事件缓冲区大小
+    #[serde(default = "default_event_buffer_size")]
+    pub event_buffer_size: usize,
+
+    /// 事件刷新间隔（毫秒）
+    #[serde(default = "default_event_flush_interval_ms")]
+    pub event_flush_interval_ms: u64,
+
+    /// 启用文件缓存（Level 3.3）
+    #[serde(default = "default_enable_file_cache")]
+    pub enable_file_cache: bool,
+
+    /// 文件缓存大小
+    #[serde(default = "default_file_cache_size")]
+    pub file_cache_size: usize,
+
+    /// 启用大文件内存映射（Level 3.1）
+    #[serde(default = "default_enable_mmap_large_files")]
+    pub enable_mmap_large_files: bool,
+
+    /// 内存映射阈值（MB）
+    #[serde(default = "default_mmap_threshold_mb")]
+    pub mmap_threshold_mb: u64,
+}
+
+fn default_max_parallel_tasks() -> usize {
+    4
+}
+
+fn default_enable_adaptive_concurrency() -> bool {
+    true
+}
+
+fn default_enable_event_buffering() -> bool {
+    true
+}
+
+fn default_event_buffer_size() -> usize {
+    50
+}
+
+fn default_event_flush_interval_ms() -> u64 {
+    100
+}
+
+fn default_enable_file_cache() -> bool {
+    false // 默认关闭，避免内存占用
+}
+
+fn default_file_cache_size() -> usize {
+    100
+}
+
+fn default_enable_mmap_large_files() -> bool {
+    true
+}
+
+fn default_mmap_threshold_mb() -> u64 {
+    10
+}
+
+impl Default for StdioConfig {
+    fn default() -> Self {
+        Self {
+            max_parallel_tasks: default_max_parallel_tasks(),
+            enable_adaptive_concurrency: default_enable_adaptive_concurrency(),
+            enable_event_buffering: default_enable_event_buffering(),
+            event_buffer_size: default_event_buffer_size(),
+            event_flush_interval_ms: default_event_flush_interval_ms(),
+            enable_file_cache: default_enable_file_cache(),
+            file_cache_size: default_file_cache_size(),
+            enable_mmap_large_files: default_enable_mmap_large_files(),
+            mmap_threshold_mb: default_mmap_threshold_mb(),
         }
     }
 }

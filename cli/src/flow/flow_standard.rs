@@ -1,4 +1,4 @@
-//! 标准（非 TUI）执行流：解析用户输入、调用 plugins planner 生成 `RunnerSpec`，再通过 core 引擎执行一次会话。
+//! 标准（非 TUI）执行流：解析用户输入、调用 planner 生成 `RunnerSpec`，通过 core 引擎执行一次会话。
 use crate::commands::cli::{Args, RunArgs};
 use crate::task_level::infer_task_level;
 use memex_core::api as core_api;
@@ -42,6 +42,7 @@ pub async fn run_standard_flow(
             wrapper_start_data: start_data,
         },
         |input| async move {
+            let backend_kind_str = input.backend_kind.to_string();
             core_api::run_session(core_api::RunSessionArgs {
                 session: input.session,
                 control: &input.control,
@@ -50,7 +51,7 @@ pub async fn run_standard_flow(
                 events_out: input.events_out_tx,
                 event_tx: None,
                 run_id: &input.run_id,
-                backend_kind: &input.backend_kind,
+                backend_kind: &backend_kind_str,
                 stream_format: &input.stream_format,
                 abort_rx: None,
             })
@@ -98,10 +99,7 @@ async fn build_plan_request(
 ) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
-            let backend_kind = ra.backend_kind.map(|kind| match kind {
-                crate::commands::cli::BackendKind::Codecli => "codecli".to_string(),
-                crate::commands::cli::BackendKind::Aiservice => "aiservice".to_string(),
-            });
+            let backend_kind = ra.backend_kind.map(Into::into);
 
             if ra.backend == "codex" && ra.model_provider.is_some() {
                 let task_grade_result = infer_task_level(

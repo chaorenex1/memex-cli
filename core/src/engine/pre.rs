@@ -3,7 +3,6 @@ use crate::gatekeeper::{GatekeeperPlugin, SearchMatch};
 use crate::memory::{
     merge_prompt, render_memory_context, InjectConfig, MemoryPlugin, QASearchPayload,
 };
-use crate::runner::RunOutcome;
 use crate::tool_event::WrapperEvent;
 
 pub(crate) struct EngineContext<'a> {
@@ -69,36 +68,23 @@ pub(crate) async fn pre_run(ctx: &EngineContext<'_>, user_query: &str) -> PreRun
         matches = matches.len()
     );
 
-    let mut ev = WrapperEvent::new("memory.search.result", chrono::Utc::now().to_rfc3339());
+    let mut ev = WrapperEvent::new("memory.search.result", chrono::Local::now().to_rfc3339());
     ev.data = Some(serde_json::json!({
         "query": user_query,
         "matches": matches.clone(),
     }));
 
-    let run_outcome = RunOutcome {
-        exit_code: 0,
-        duration_ms: None,
-        stdout_tail: String::new(),
-        stderr_tail: String::new(),
-        tool_events: vec![],
-        shown_qa_ids: vec![],
-        used_qa_ids: vec![],
-    };
+    let inject_list = ctx.gatekeeper.prepare_inject(&matches);
 
-    let decision = ctx.gatekeeper.evaluate(
-        chrono::Utc::now(),
-        &matches,
-        &run_outcome,
-        &run_outcome.tool_events,
+    tracing::debug!(
+        target: "memex.qa",
+        stage = "gatekeeper.inject",
+        inject_count = inject_list.len()
     );
 
-    let memory_ctx = render_memory_context(&decision.inject_list, ctx.inject_cfg);
+    let memory_ctx = render_memory_context(&inject_list, ctx.inject_cfg);
     let merged = merge_prompt(user_query, &memory_ctx);
-    let shown: Vec<String> = decision
-        .inject_list
-        .iter()
-        .map(|x| x.qa_id.clone())
-        .collect();
+    let shown: Vec<String> = inject_list.iter().map(|x| x.qa_id.clone()).collect();
 
     tracing::debug!(
         target: "memex.qa",

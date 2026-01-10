@@ -1,5 +1,4 @@
 pub mod adapters;
-pub mod client;
 pub mod models;
 pub mod r#trait;
 
@@ -12,8 +11,9 @@ mod types;
 pub use r#trait::MemoryPlugin;
 
 pub use adapters::parse_search_matches;
-pub use client::MemoryClient;
-pub use models::{QACandidatePayload, QAHitsPayload, QASearchPayload, QAValidationPayload};
+pub use models::{
+    QACandidatePayload, QAHitsPayload, QAReferencePayload, QASearchPayload, QAValidationPayload,
+};
 
 pub use candidates::extract_candidates;
 pub use payloads::{build_candidate_payloads, build_hit_payload, build_validate_payloads};

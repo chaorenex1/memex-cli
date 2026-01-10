@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::{anyhow, Result};
 
 use memex_core::api as core_api;
@@ -13,17 +11,18 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
         "aiservice"
     }
 
-    fn plan(
-        &self,
-        backend: &str,
-        mut base_envs: HashMap<String, String>,
-        _resume_id: Option<String>,
-        prompt: String,
-        model: Option<String>,
-        model_provider: Option<String>,
-        project_id: Option<String>,
-        stream_format: &str,
-    ) -> Result<core_api::BackendPlan> {
+    fn plan(&self, request: core_api::BackendPlanRequest) -> Result<core_api::BackendPlan> {
+        let core_api::BackendPlanRequest {
+            backend,
+            mut base_envs,
+            resume_id: _resume_id,
+            prompt,
+            model,
+            model_provider,
+            project_id,
+            stream_format,
+        } = request;
+
         tracing::debug!("AiServiceBackendStrategy planning with backend: {}, project_id: {:?}, model: {:?}, model_provider: {:?}", backend, project_id, model, model_provider);
         if !(backend.starts_with("http://") || backend.starts_with("https://")) {
             return Err(anyhow!(
@@ -38,7 +37,7 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
         }
         // Wrapper always streams output; the format is controlled separately via stream_format.
         base_envs.insert("MEMEX_STREAM".to_string(), "1".to_string());
-        base_envs.insert("MEMEX_STREAM_FORMAT".to_string(), stream_format.to_string());
+        base_envs.insert("MEMEX_STREAM_FORMAT".to_string(), stream_format);
 
         Ok(core_api::BackendPlan {
             runner: Box::new(AiServiceRunnerPlugin::new()),

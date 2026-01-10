@@ -8,7 +8,7 @@ use crate::factory;
 pub enum PlanMode {
     Backend {
         backend_spec: String,
-        backend_kind: Option<String>,
+        backend_kind: Option<core_api::BackendKind>,
         env_file: Option<String>,
         env: Vec<String>,
         model: Option<String>,
@@ -46,10 +46,8 @@ pub fn build_runner_spec(
             project_id,
             task_level,
         } => {
-            if let Some(kind) = backend_kind.as_deref() {
-                if !kind.trim().is_empty() {
-                    cfg.backend_kind = kind.to_string();
-                }
+            if let Some(kind) = backend_kind {
+                cfg.backend_kind = kind;
             }
 
             // Merge envs from config dir .env file.
@@ -74,8 +72,8 @@ pub fn build_runner_spec(
                 }
             }
 
-            let backend = match backend_kind.as_deref() {
-                Some(kind) => factory::build_backend_with_kind(kind, &backend_spec),
+            let backend = match backend_kind {
+                Some(kind) => factory::build_backend_with_kind(&kind.to_string(), &backend_spec),
                 None => factory::build_backend(&backend_spec),
             };
 

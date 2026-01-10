@@ -163,7 +163,7 @@ async fn send_policy_decision(
     let cmd = PolicyDecisionCmd {
         v: 1,
         ty: "policy.decision",
-        ts: chrono::Utc::now().to_rfc3339(),
+        ts: chrono::Local::now().to_rfc3339(),
         run_id,
         id,
         decision: decision_str,

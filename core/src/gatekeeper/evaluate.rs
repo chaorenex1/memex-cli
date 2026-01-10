@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -10,12 +10,97 @@ use super::config::GatekeeperConfig;
 use super::decision::{GatekeeperDecision, HitRef, InjectItem, SearchMatch, ValidatePlan};
 use super::signals::{build_signals, grade_validation_signal, SignalHeuristics};
 
+/// Prepare inject list based solely on matches and config.
+/// Used in pre-run phase where RunOutcome doesn't exist yet.
+///
+/// This function filters, sorts, and selects QA items to inject into the prompt.
+/// It does not depend on execution results.
+pub fn prepare_inject_list(cfg: &GatekeeperConfig, matches: &[SearchMatch]) -> Vec<InjectItem> {
+    // Filter usable matches
+    let mut usable: Vec<&SearchMatch> = Vec::new();
+
+    for m in matches.iter() {
+        if !cfg.active_statuses.contains(&m.status) {
+            continue;
+        }
+
+        if cfg.exclude_stale_by_default && m.freshness < 0.001 {
+            continue;
+        }
+
+        if cfg.block_if_consecutive_fail_ge > 0 {
+            let cf = extract_i32(&m.metadata, "consecutive_fail").unwrap_or(0);
+            if cf >= cfg.block_if_consecutive_fail_ge {
+                continue;
+            }
+        }
+
+        usable.push(m);
+    }
+
+    // Sort by (validation_level, trust, score, freshness)
+    usable.sort_by(|a, b| {
+        let key_a = (a.validation_level, a.trust, a.score, a.freshness);
+        let key_b = (b.validation_level, b.trust, b.score, b.freshness);
+
+        key_b
+            .0
+            .cmp(&key_a.0)
+            .then_with(|| {
+                key_b
+                    .1
+                    .partial_cmp(&key_a.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                key_b
+                    .2
+                    .partial_cmp(&key_a.2)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                key_b
+                    .3
+                    .partial_cmp(&key_a.3)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+
+    let has_strong = usable
+        .iter()
+        .any(|m| m.validation_level >= cfg.min_level_inject);
+
+    // Build inject list
+    let mut inject_list: Vec<InjectItem> = Vec::new();
+
+    for m in usable.iter() {
+        if inject_list.len() >= cfg.max_inject {
+            break;
+        }
+        if m.validation_level >= cfg.min_level_inject && m.trust >= cfg.min_trust_show {
+            inject_list.push(to_inject_item(m));
+        }
+    }
+
+    // Fallback logic if no strong matches
+    if inject_list.is_empty() && !usable.is_empty() && !has_strong {
+        for m in usable.iter().take(cfg.max_inject) {
+            if m.validation_level >= cfg.min_level_fallback && m.trust >= cfg.min_trust_show {
+                inject_list.push(to_inject_item(m));
+                break;
+            }
+        }
+    }
+
+    inject_list
+}
+
 pub struct Gatekeeper;
 
 impl Gatekeeper {
     pub fn evaluate(
         cfg: &GatekeeperConfig,
-        now: DateTime<Utc>,
+        _now: DateTime<Local>,
         matches: &[SearchMatch],
         run: &RunOutcome,
         tool_events: &[ToolEvent],
@@ -39,10 +124,15 @@ impl Gatekeeper {
             reasons.push(format!("top1_score={:.3}", s));
         }
 
-        let mut usable: Vec<&SearchMatch> = Vec::new();
+        // Use prepare_inject_list to get inject candidates (eliminates duplicate logic)
+        let inject_list = prepare_inject_list(cfg, matches);
+
+        // Compute statistics for reasons (using same filtering logic as prepare_inject_list)
+        let mut usable_count = 0usize;
         let mut stale_count = 0usize;
         let mut status_reject = 0usize;
         let mut fail_reject = 0usize;
+        let mut has_strong = false;
 
         for m in matches.iter() {
             if !cfg.active_statuses.contains(&m.status) {
@@ -50,79 +140,30 @@ impl Gatekeeper {
                 continue;
             }
 
-            if cfg.exclude_stale_by_default && is_stale(m, now) {
+            if cfg.exclude_stale_by_default && m.freshness < 0.001 {
                 stale_count += 1;
                 continue;
             }
 
-            let cf = extract_i32(&m.metadata, "consecutive_fail").unwrap_or(0);
-            if cf >= cfg.block_if_consecutive_fail_ge {
-                fail_reject += 1;
-                continue;
+            if cfg.block_if_consecutive_fail_ge > 0 {
+                let cf = extract_i32(&m.metadata, "consecutive_fail").unwrap_or(0);
+                if cf >= cfg.block_if_consecutive_fail_ge {
+                    fail_reject += 1;
+                    continue;
+                }
             }
 
-            usable.push(m);
+            usable_count += 1;
+
+            if m.validation_level >= cfg.min_level_inject {
+                has_strong = true;
+            }
         }
 
         reasons.push(format!(
             "filtered: usable={}, status_reject={}, stale_reject={}, fail_reject={}",
-            usable.len(),
-            status_reject,
-            stale_count,
-            fail_reject
+            usable_count, status_reject, stale_count, fail_reject
         ));
-
-        usable.sort_by(|a, b| {
-            let key_a = (a.validation_level, a.trust, a.score, a.freshness);
-            let key_b = (b.validation_level, b.trust, b.score, b.freshness);
-
-            key_b
-                .0
-                .cmp(&key_a.0)
-                .then_with(|| {
-                    key_b
-                        .1
-                        .partial_cmp(&key_a.1)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .then_with(|| {
-                    key_b
-                        .2
-                        .partial_cmp(&key_a.2)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .then_with(|| {
-                    key_b
-                        .3
-                        .partial_cmp(&key_a.3)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-        });
-
-        let has_strong = usable
-            .iter()
-            .any(|m| m.validation_level >= cfg.min_level_inject);
-
-        let mut inject_list: Vec<InjectItem> = Vec::new();
-
-        for m in usable.iter() {
-            if inject_list.len() >= cfg.max_inject {
-                break;
-            }
-            if m.validation_level >= cfg.min_level_inject && m.trust >= cfg.min_trust_show {
-                inject_list.push(to_inject_item(m));
-            }
-        }
-
-        if inject_list.is_empty() && !usable.is_empty() && !has_strong {
-            for m in usable.iter().take(cfg.max_inject) {
-                if m.validation_level >= cfg.min_level_fallback && m.trust >= cfg.min_trust_show {
-                    reasons.push("inject fallback (no strong matches)".to_string());
-                    inject_list.push(to_inject_item(m));
-                    break;
-                }
-            }
-        }
 
         reasons.push(format!(
             "inject: count={}, has_strong={}",
@@ -236,7 +277,7 @@ impl Gatekeeper {
 
         let mut signals = build_signals(matches, run, corr);
         if let Some(map) = signals.as_object_mut() {
-            map.insert("usable_count".into(), serde_json::json!(usable.len()));
+            map.insert("usable_count".into(), serde_json::json!(usable_count));
             map.insert("inject_count".into(), serde_json::json!(inject_list.len()));
             map.insert("has_strong".into(), serde_json::json!(has_strong));
             map.insert("top1_score".into(), serde_json::json!(top1_score));
@@ -294,16 +335,6 @@ fn to_inject_item(m: &SearchMatch) -> InjectItem {
         validation_level: m.validation_level,
         score: m.score,
         tags: m.tags.clone(),
-    }
-}
-
-fn is_stale(m: &SearchMatch, now: DateTime<Utc>) -> bool {
-    let Some(s) = &m.expiry_at else {
-        return false;
-    };
-    match DateTime::parse_from_rfc3339(s) {
-        Ok(dt) => dt.with_timezone(&Utc) <= now,
-        Err(_) => false,
     }
 }
 

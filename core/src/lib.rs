@@ -9,5 +9,6 @@ mod gatekeeper;
 mod memory;
 mod replay;
 mod runner;
+pub mod stdio;
 mod tool_event;
 mod util;

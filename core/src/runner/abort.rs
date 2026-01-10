@@ -35,7 +35,7 @@ struct PolicyAbortCmd {
 
 impl PolicyAbortCmd {
     fn new(run_id: String, reason: String, code: Option<String>) -> Self {
-        let now = chrono::Utc::now();
+        let now = chrono::Local::now();
         let id = format!("abort-{}-{}", run_id, now.timestamp_millis());
         Self {
             v: 1,
