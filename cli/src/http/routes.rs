@@ -342,11 +342,10 @@ async fn evaluate_session_handler(
     validate_project_id(&req.project_id)?;
 
     // 检查服务
-    let memory = state
-        .services
-        .memory
-        .as_ref()
-        .ok_or_else(|| HttpServerError::MemoryService("Memory service not configured".into()))?;
+    let memory =
+        state.services.memory.as_ref().ok_or_else(|| {
+            HttpServerError::MemoryService("Memory service not configured".into())
+        })?;
 
     // 1. 不搜索 memory（避免与 pre-run 时的结果不一致）
     // 注意：这意味着智能抑制策略（has_strong, skip_if_top1_score_ge）会被禁用
@@ -382,7 +381,10 @@ async fn evaluate_session_handler(
             action: None,
             args: te.args.clone(),
             ok: te.code.map(|c| c == 0),
-            output: te.output.as_ref().map(|s| serde_json::Value::String(s.clone())),
+            output: te
+                .output
+                .as_ref()
+                .map(|s| serde_json::Value::String(s.clone())),
             error: None,
             rationale: None,
         })
@@ -457,8 +459,10 @@ async fn evaluate_session_handler(
     let mut candidates_recorded = 0;
     if decision.should_write_candidate {
         // 从 stdout 提取候选答案
-        use memex_core::api::{build_candidate_payloads, extract_candidates, CandidateExtractConfig};
         use memex_core::api::ToolEventLite;
+        use memex_core::api::{
+            build_candidate_payloads, extract_candidates, CandidateExtractConfig,
+        };
 
         // 从 AppState 中获取 candidate extract 配置
         let extract_config = CandidateExtractConfig {
@@ -474,8 +478,7 @@ async fn evaluate_session_handler(
             confidence: state.config.candidate_extract.confidence,
         };
 
-        let tool_events_lite: Vec<ToolEventLite> =
-            tool_events.iter().map(|e| e.into()).collect();
+        let tool_events_lite: Vec<ToolEventLite> = tool_events.iter().map(|e| e.into()).collect();
         let candidate_drafts = extract_candidates(
             &extract_config,
             &req.user_query,

@@ -22,7 +22,9 @@ const DEFAULT_CACHE_SIZE: usize = 100;
 
 lazy_static! {
     static ref FILE_CACHE: Mutex<LruCache<PathBuf, Arc<Vec<u8>>>> = {
-        Mutex::new(LruCache::new(NonZeroUsize::new(DEFAULT_CACHE_SIZE).unwrap()))
+        Mutex::new(LruCache::new(
+            NonZeroUsize::new(DEFAULT_CACHE_SIZE).unwrap(),
+        ))
     };
 }
 
@@ -105,14 +107,12 @@ impl FileProcessorPlugin {
             .clone()
             .unwrap_or_else(|| ".".to_string());
         let workdir = PathBuf::from(&workdir);
-        let base_canon = tokio::fs::canonicalize(&workdir)
-            .await
-            .map_err(|_| {
-                ProcessorError::InvalidInput(format!(
-                    "working directory not found: {}",
-                    workdir.display()
-                ))
-            })?;
+        let base_canon = tokio::fs::canonicalize(&workdir).await.map_err(|_| {
+            ProcessorError::InvalidInput(format!(
+                "working directory not found: {}",
+                workdir.display()
+            ))
+        })?;
 
         let files_mode = FilesMode::parse(task.metadata.files_mode.as_deref());
         let files_encoding = FilesEncoding::parse(task.metadata.files_encoding.as_deref());
@@ -490,10 +490,7 @@ async fn process_single_file(
             FilesEncoding::Utf8 => match String::from_utf8(bytes.clone()) {
                 Ok(text) => ResolvedContent::Text(text),
                 Err(_) => {
-                    tracing::warn!(
-                        "File {} is not valid UTF-8, using base64",
-                        display_path
-                    );
+                    tracing::warn!("File {} is not valid UTF-8, using base64", display_path);
                     ResolvedContent::Base64(base64::Engine::encode(
                         &base64::engine::general_purpose::STANDARD,
                         &bytes,

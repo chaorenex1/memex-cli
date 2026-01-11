@@ -35,10 +35,7 @@ pub async fn start_server(
     port: u16,
     state: AppState,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let config = ServerConfig {
-        host,
-        port,
-    };
+    let config = ServerConfig { host, port };
 
     start_server_with_config(session_id, config, state).await
 }

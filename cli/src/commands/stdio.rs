@@ -124,8 +124,7 @@ pub async fn handle_stdio(
     let processors = factory::build_task_processors(&ctx.cfg().executor);
     let renderer = factory::build_renderer(&args.stream_format, &ctx.cfg().executor.output);
     let retry_strategy = factory::build_retry_strategy(&ctx.cfg().executor.retry);
-    let concurrency_strategy =
-        factory::build_concurrency_strategy(&ctx.cfg().executor.concurrency);
+    let concurrency_strategy = factory::build_concurrency_strategy(&ctx.cfg().executor.concurrency);
 
     // 注入resume上下文到第一个任务
     if let Some(ctx_str) = &resume_context {

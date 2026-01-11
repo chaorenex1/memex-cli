@@ -148,9 +148,9 @@ async fn process_single_file(
     }
 
     // 规范化路径
-    let canon = tokio::fs::canonicalize(&path).await.map_err(|_| {
-        StdioError::FileNotFound(path.display().to_string())
-    })?;
+    let canon = tokio::fs::canonicalize(&path)
+        .await
+        .map_err(|_| StdioError::FileNotFound(path.display().to_string()))?;
 
     // 去重检查
     {
@@ -169,9 +169,9 @@ async fn process_single_file(
     };
 
     // 获取元数据
-    let meta = tokio::fs::metadata(&canon).await.map_err(|_| {
-        StdioError::FileAccessDenied(canon.display().to_string())
-    })?;
+    let meta = tokio::fs::metadata(&canon)
+        .await
+        .map_err(|_| StdioError::FileAccessDenied(canon.display().to_string()))?;
 
     if !meta.is_file() {
         return Ok(None);
@@ -259,9 +259,9 @@ pub async fn resolve_files(
 
     // 获取工作目录规范路径
     let workdir = PathBuf::from(&task.workdir);
-    let base_canon = tokio::fs::canonicalize(&workdir)
-        .await
-        .map_err(|_| StdioError::InvalidPath(format!("working directory not found: {}", task.workdir)))?;
+    let base_canon = tokio::fs::canonicalize(&workdir).await.map_err(|_| {
+        StdioError::InvalidPath(format!("working directory not found: {}", task.workdir))
+    })?;
 
     // 并发控制（最多16个文件同时处理）
     let semaphore = Arc::new(Semaphore::new(16));

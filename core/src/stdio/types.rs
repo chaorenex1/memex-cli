@@ -45,18 +45,22 @@ impl StdioTask {
             timeout: self.timeout,
             retry: self.retry,
             files: self.files.clone(),
-            files_mode: Some(match self.files_mode {
-                FilesMode::Embed => "embed",
-                FilesMode::Ref => "ref",
-                FilesMode::Auto => "auto",
-            }
-            .to_string()),
-            files_encoding: Some(match self.files_encoding {
-                FilesEncoding::Utf8 => "utf8",
-                FilesEncoding::Base64 => "base64",
-                FilesEncoding::Auto => "auto",
-            }
-            .to_string()),
+            files_mode: Some(
+                match self.files_mode {
+                    FilesMode::Embed => "embed",
+                    FilesMode::Ref => "ref",
+                    FilesMode::Auto => "auto",
+                }
+                .to_string(),
+            ),
+            files_encoding: Some(
+                match self.files_encoding {
+                    FilesEncoding::Utf8 => "utf8",
+                    FilesEncoding::Base64 => "base64",
+                    FilesEncoding::Auto => "auto",
+                }
+                .to_string(),
+            ),
             tags: Vec::new(),
         };
 

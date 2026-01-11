@@ -109,8 +109,8 @@ impl TaskProcessorPlugin for ContextInjectorPlugin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memex_core::executor::traits::DependencyResult;
     use memex_core::api::AppConfig;
+    use memex_core::executor::traits::DependencyResult;
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -141,7 +141,9 @@ mod tests {
         };
 
         let result = plugin.process(&task, &ctx).await.unwrap();
-        assert!(result.enhanced_content.contains("=== Dependency Outputs ==="));
+        assert!(result
+            .enhanced_content
+            .contains("=== Dependency Outputs ==="));
         assert!(result.enhanced_content.contains("# Task: a"));
         assert!(result.enhanced_content.contains("out-a"));
         assert!(!result.enhanced_content.contains("# Task: b"));

@@ -477,8 +477,7 @@ fn validate_id(id: &str) -> Result<(), StdioError> {
         return Err(StdioError::InvalidId(id.to_string()));
     }
     static ID_REGEX: OnceLock<Regex> = OnceLock::new();
-    let re = ID_REGEX
-        .get_or_init(|| Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_\-\.]{0,127}$").unwrap());
+    let re = ID_REGEX.get_or_init(|| Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_\-\.]{0,127}$").unwrap());
     if !re.is_match(id) {
         return Err(StdioError::InvalidId(id.to_string()));
     }

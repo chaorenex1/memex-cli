@@ -10,15 +10,15 @@ use crate::error::ExecutorError;
 use crate::runner::{run_session, RunSessionArgs, RunnerResult};
 use crate::stdio::StdioTask;
 
-use super::traits::{
-    ConcurrencyContext, ConcurrencyStrategyPlugin, DependencyResult, OutputRendererPlugin,
-    ProcessContext, RenderEvent, RetryStrategyPlugin, TaskProcessorPlugin,
-};
 use super::graph::TaskGraph;
 use super::output::{
     emit_execution_plan, emit_run_end, emit_run_start, emit_stage_end, emit_stage_start,
 };
 use super::progress::ProgressMonitor;
+use super::traits::{
+    ConcurrencyContext, ConcurrencyStrategyPlugin, DependencyResult, OutputRendererPlugin,
+    ProcessContext, RenderEvent, RetryStrategyPlugin, TaskProcessorPlugin,
+};
 use super::types::{ExecutionOpts, ExecutionResult, TaskResult};
 
 /// Execution engine for task dependency graphs
@@ -216,11 +216,7 @@ impl<'a> ExecutionEngine<'a> {
             .concurrency_strategy
             .as_ref()
             .map(|strategy| {
-                let context = build_concurrency_context(
-                    self.ctx,
-                    base_parallel,
-                    task_ids.len(),
-                );
+                let context = build_concurrency_context(self.ctx, base_parallel, task_ids.len());
                 strategy.calculate_concurrency(&context)
             })
             .unwrap_or(base_parallel)
@@ -360,8 +356,7 @@ impl<'a> ExecutionEngine<'a> {
                     )
                     .await?;
 
-                    total_duration_ms =
-                        total_duration_ms.saturating_add(task_outcome.duration_ms);
+                    total_duration_ms = total_duration_ms.saturating_add(task_outcome.duration_ms);
                     last_exit_code = task_outcome.exit_code;
                     last_output = task_outcome.output;
 
@@ -509,11 +504,7 @@ impl<'a> ExecutionEngine<'a> {
                 run_id: run_id.to_string(),
                 task_id: "executor".to_string(),
                 progress,
-                message: Some(format!(
-                    "stage {}/{}",
-                    stage_id + 1,
-                    total_stages
-                )),
+                message: Some(format!("stage {}/{}", stage_id + 1, total_stages)),
             });
         } else {
             super::output::emit_progress_update(
@@ -720,8 +711,7 @@ fn build_concurrency_context(
     sys.refresh_memory();
 
     let cpu_count = sys.cpus().len().max(1);
-    let cpu_usage =
-        sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / cpu_count as f32;
+    let cpu_usage = sys.cpus().iter().map(|c| c.cpu_usage()).sum::<f32>() / cpu_count as f32;
 
     let total_memory = sys.total_memory().max(1);
     let memory_usage = (sys.used_memory() as f32 / total_memory as f32) * 100.0;

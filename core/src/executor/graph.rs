@@ -42,10 +42,7 @@ impl<T: TaskLike> TaskGraph<T> {
 
             // Build reverse edges
             for dep in dependencies {
-                reverse_edges
-                    .entry(dep)
-                    .or_default()
-                    .push(task_id.clone());
+                reverse_edges.entry(dep).or_default().push(task_id.clone());
             }
         }
 
@@ -179,10 +176,9 @@ impl<T: TaskLike> TaskGraph<T> {
         let mut stack = Vec::new();
 
         for task_id in self.nodes.keys() {
-            if !visited.contains(task_id)
-                && self.dfs_cycle(task_id, &mut visited, &mut stack) {
-                    return Some(format_cycle_path(&stack));
-                }
+            if !visited.contains(task_id) && self.dfs_cycle(task_id, &mut visited, &mut stack) {
+                return Some(format_cycle_path(&stack));
+            }
         }
 
         None
@@ -207,7 +203,7 @@ impl<T: TaskLike> TaskGraph<T> {
                 }
 
                 // Recursively check unvisited dependencies
-                if !visited.contains(dep)&& self.dfs_cycle(dep, visited, stack) {
+                if !visited.contains(dep) && self.dfs_cycle(dep, visited, stack) {
                     return true;
                 }
             }

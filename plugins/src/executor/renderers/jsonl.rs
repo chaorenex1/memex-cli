@@ -143,9 +143,15 @@ impl OutputRendererPlugin for JsonlRendererPlugin {
     fn render(&self, event: &RenderEvent) {
         let value = self.event_to_json(event);
         if self.pretty_print {
-            println!("{}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".into()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".into())
+            );
         } else {
-            println!("{}", serde_json::to_string(&value).unwrap_or_else(|_| "{}".into()));
+            println!(
+                "{}",
+                serde_json::to_string(&value).unwrap_or_else(|_| "{}".into())
+            );
         }
     }
 }

@@ -68,12 +68,7 @@ pub async fn handle_http_server(args: HttpServerArgs, ctx: &AppContext) -> Resul
     let (shutdown_tx, _) = broadcast::channel(1);
 
     // 创建 AppState（传入完整配置）
-    let state = AppState::new(
-        session_id.clone(),
-        services,
-        ctx.cfg().clone(),
-        shutdown_tx,
-    );
+    let state = AppState::new(session_id.clone(), services, ctx.cfg().clone(), shutdown_tx);
 
     // 写入状态文件（在服务器启动前）
     write_state_file(&session_id, port, &host)?;

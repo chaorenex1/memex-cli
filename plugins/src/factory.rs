@@ -75,9 +75,7 @@ pub fn build_backend_with_kind(kind: &str, backend: &str) -> Box<dyn core_api::B
 }
 
 /// 构建任务处理器插件链
-pub fn build_task_processors(
-    cfg: &core_api::ExecutionConfig,
-) -> Vec<Arc<dyn TaskProcessorPlugin>> {
+pub fn build_task_processors(cfg: &core_api::ExecutionConfig) -> Vec<Arc<dyn TaskProcessorPlugin>> {
     let mut processors: Vec<Arc<dyn TaskProcessorPlugin>> = Vec::new();
 
     if cfg.file_processing.enabled {
@@ -93,10 +91,7 @@ pub fn build_task_processors(
 }
 
 /// 构建输出渲染器插件
-pub fn build_renderer(
-    format: &str,
-    cfg: &core_api::OutputConfig,
-) -> Arc<dyn OutputRendererPlugin> {
+pub fn build_renderer(format: &str, cfg: &core_api::OutputConfig) -> Arc<dyn OutputRendererPlugin> {
     let format = if format.is_empty() {
         cfg.format.as_str()
     } else {
