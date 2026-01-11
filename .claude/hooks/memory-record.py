@@ -166,30 +166,22 @@ def record_with_fallback(session_id, project_id, query, answer, tags_str, metada
     """
     # 方案 A: 尝试使用HTTP服务器（异步）
     try:
-        log_func("Attempting HTTP server recording...")
-        client = HTTPClient(session_id)
-
-        # 快速健康检查
-        health = client.health_check()
-        if health.get("status") == "healthy":
-            # HTTP服务器可用，使用异步方式
-            record_via_http_async(session_id, query, answer, tags_str, metadata, project_id, log_func)
-            return True
-        else:
-            log_func("HTTP server not available, falling back to direct call")
+        # HTTP服务器可用，使用异步方式
+        record_via_http_async(session_id, query, answer, tags_str, metadata, project_id, log_func)
+        return True
     except Exception as e:
         log_func(f"HTTP server unavailable: {e}, falling back to direct call")
 
-    # 方案 B: 降级到直接调用
-    cmd = [
-        "memex-cli", 'record-candidate',
-        '--project-id', project_id,
-        '--query', query,
-        '--answer', answer,
-        '--tags', tags_str,
-        '--metadata', metadata
-    ]
-    return record_async(cmd, log_func)
+        # 方案 B: 降级到直接调用
+        cmd = [
+            "memex-cli", 'record-candidate',
+            '--project-id', project_id,
+            '--query', query,
+            '--answer', answer,
+            '--tags', tags_str,
+            '--metadata', metadata
+        ]
+        return record_async(cmd, log_func)
 
 
 def main():

@@ -45,18 +45,22 @@ def main():
         log_debug(f"Project ID: {project_id}")
 
         # 停止HTTP服务器
-        try:
-            server_manager = ServerManager(session_id)
-            if server_manager.is_server_running():
-                log_debug("Stopping memex HTTP server...")
-                if server_manager.stop_server():
-                    log_debug("✓ Memex HTTP server stopped successfully")
-                else:
-                    log_debug("✗ Failed to stop memex HTTP server")
-            else:
-                log_debug("Memex HTTP server not running")
-        except Exception as e:
-            log_debug(f"Warning: Could not stop HTTP server: {e}")
+        # try:
+        #     server_manager = ServerManager(session_id)
+        #     log_debug("Checking memex HTTP server status...")
+        #     log_debug(f"Server state: {server_manager.load_state()}")
+        #     log_debug(f"Server state file: {server_manager.state_file}")
+        #     log_debug(f"Is server running: {server_manager.is_server_running()}")
+        #     if server_manager.is_server_running():
+        #         log_debug("Stopping memex HTTP server...")
+        #         if server_manager.stop_server():
+        #             log_debug("✓ Memex HTTP server stopped successfully")
+        #         else:
+        #             log_debug("✗ Failed to stop memex HTTP server")
+        #     else:
+        #         log_debug("Memex HTTP server not running")
+        # except Exception as e:
+        #     log_debug(f"Warning: Could not stop HTTP server: {e}")
 
         # 清理当前会话状态
         clear_session_state(session_id)

@@ -101,13 +101,9 @@ def main():
         log_debug(f"Hook triggered: {json.dumps(hook_input, ensure_ascii=False)[:200]}")
 
         user_prompt = hook_input.get("prompt", "")
+        log_debug(f"User Prompt: {user_prompt}")
         cwd = hook_input.get("cwd", os.getcwd())
         session_id = hook_input.get("session_id", "unknown")
-
-        # 跳过条件
-        if not user_prompt.strip() or len(user_prompt.strip()) < 10:
-            log_debug("Skipping: prompt too short or empty")
-            sys.exit(0)
 
         # 生成 project_id
         project_id = get_project_id_from_cwd(cwd)
@@ -118,15 +114,21 @@ def main():
             session_id=session_id,
             query=user_prompt,
             project_id=project_id,
-            limit=5,
+            limit=10,
             min_score=0.6
         )
 
         if search_result is None:
             log_debug("Search failed with both daemon and direct call")
             sys.exit(0)
-
-        matches = search_result.get("matches", [])
+        if len(search_result) == 0:
+            log_debug("Search returned empty result")
+            sys.exit(0)
+        log_debug(f"Search Result: {json.dumps(search_result, ensure_ascii=False)}")
+        if isinstance(search_result, list):
+            matches = search_result
+        else:
+            matches = search_result.get("matches", [])
 
         if not matches:
             log_debug("No matches found")

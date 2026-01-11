@@ -4,6 +4,7 @@ HTTP客户端
 用于hooks与HTTP服务器通信
 """
 import os
+import sys
 import json
 import subprocess
 from typing import Dict, Any, Optional, List
@@ -161,6 +162,17 @@ class HTTPClient:
             }
         )
 
+    def record_validation(
+        self,
+        payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """记录知识验证"""
+        return self._send_request(
+            "POST",
+            "/api/v1/record-validation",
+            payload
+        )
+
     def health_check(self) -> Dict[str, Any]:
         """健康检查"""
         return self._send_request("GET", "/health")
@@ -187,7 +199,7 @@ def direct_cli_call(command: str, args: Dict[str, Any]) -> Dict[str, Any]:
         cmd.append(f"--{key}")
         cmd.append(str(value))
 
-    cmd.extend(["--format", "json"])
+    # cmd.extend(["--format", "json"])
 
     try:
         env = get_utf8_env()

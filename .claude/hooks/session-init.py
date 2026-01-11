@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 Session Init Hook (HTTP Server Version)
-零阻塞版本：使用后台线程启动HTTP服务器
+零阻塞版本：启动服务器后立即返回
 """
 
 import sys
 import json
 import os
-import threading
 from pathlib import Path
 from datetime import datetime
 from project_utils import get_project_id_from_cwd
@@ -25,39 +24,6 @@ def log_debug(message):
             f.write(f"[{timestamp}] {message}\n")
     except:
         pass
-
-
-def start_server_async(session_id):
-    """后台线程：启动 Rust HTTP 服务器（零阻塞）"""
-    try:
-        log_debug(f"[Thread] Starting Rust HTTP server for session {session_id}")
-        server_manager = ServerManager(session_id)
-
-        # 检查服务器是否已运行
-        if server_manager.is_server_running():
-            log_debug("[Thread] Server already running, skipping start")
-            return
-
-        # 启动 Rust HTTP 服务器
-        success = server_manager.start_server()
-
-        if success:
-            port = server_manager.get_server_port()
-            url = server_manager.get_server_url()
-            log_debug(f"[Thread] ✓ Rust HTTP server started: {url} (port {port})")
-        else:
-            log_debug("[Thread] ✗ Failed to start Rust HTTP server")
-            # 检查日志文件
-            log_file = server_manager.log_file
-            if log_file.exists() and log_file.stat().st_size > 0:
-                log_debug(f"[Thread] Check server log: {log_file}")
-            else:
-                log_debug(f"[Thread] Server log is empty or missing: {log_file}")
-
-    except Exception as e:
-        log_debug(f"[Thread] ERROR: Server thread exception: {e}")
-        import traceback
-        log_debug(f"[Thread] Traceback:\n{traceback.format_exc()}")
 
 
 def main():
@@ -92,19 +58,10 @@ def main():
         if cleaned_count > 0:
             log_debug(f"Cleaned up {cleaned_count} old session state files")
 
-        # 🚀 零阻塞：在后台线程中启动HTTP服务器
-        server_thread = threading.Thread(
-            target=start_server_async,
-            args=(session_id,),
-            daemon=False  # 非守护线程，确保服务器启动完成
-        )
-        server_thread.start()
-        log_debug("HTTP server thread launched (non-blocking)")
-
-        # 等待服务器启动完成（最多2秒）
-        server_thread.join(timeout=2.0)
-        if server_thread.is_alive():
-            log_debug("Server thread still running, continuing without wait")
+        # 🚀 零阻塞：启动 Rust HTTP 服务器（不等待就绪）
+        server_manager = ServerManager(session_id)
+        started = server_manager.start_server(wait_for_ready=False)
+        log_debug(f"Rust HTTP server launch requested (started={started})")
 
         # 返回上下文
         response = {
