@@ -22,7 +22,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/search", post(search_handler))
         .route("/api/v1/record-candidate", post(record_candidate_handler))
         .route("/api/v1/record-hit", post(record_hit_handler))
+        .route("/api/v1/record-validation", post(record_validation_handler))
         .route("/api/v1/validate", post(validate_handler))
+        .route("/api/v1/evaluate-session", post(evaluate_session_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/shutdown", post(shutdown_handler))
         .with_state(state)
@@ -103,7 +105,7 @@ async fn record_candidate_handler(
         answer: req.answer,
         tags: vec![],
         confidence: 0.0,
-        metadata: serde_json::Value::Null,
+        metadata: serde_json::json!({}),
         summary: None,
         source: None,
         author: None,
@@ -197,6 +199,60 @@ async fn record_hit_handler(
     }
 }
 
+/// POST /api/v1/record-validation - 记录QA验证结果
+async fn record_validation_handler(
+    State(state): State<AppState>,
+    Json(req): Json<RecordValidationRequest>,
+) -> Result<Json<RecordValidationResponse>, HttpServerError> {
+    // 更新统计
+    {
+        let mut stats = state.stats.write().unwrap();
+        stats.increment_request("/api/v1/record-validation");
+    }
+
+    // 验证
+    validate_project_id(&req.project_id)?;
+
+    // 检查 memory 服务
+    let memory =
+        state.services.memory.as_ref().ok_or_else(|| {
+            HttpServerError::MemoryService("Memory service not configured".into())
+        })?;
+
+    // 构建 validation payload
+    let payload = QAValidationPayload {
+        project_id: req.project_id.clone(),
+        qa_id: req.qa_id.clone(),
+        result: None,
+        signal_strength: None,
+        success: Some(req.success),
+        strong_signal: Some(req.success && req.confidence >= 0.8),
+        source: Some("http-api".to_string()),
+        context: Some(format!("confidence:{}", req.confidence)),
+        client: None,
+        ts: Some(Local::now().to_rfc3339()),
+        payload: None,
+    };
+
+    // 调用 memory 服务
+    match memory.record_validation(payload).await {
+        Ok(_) => Ok(Json(RecordValidationResponse {
+            success: true,
+            message: Some(format!(
+                "Validation recorded for {} (success={}, confidence={})",
+                req.qa_id, req.success, req.confidence
+            )),
+            error: None,
+            error_code: None,
+        })),
+        Err(e) => {
+            let mut stats = state.stats.write().unwrap();
+            stats.increment_error();
+            Err(HttpServerError::MemoryService(e.to_string()))
+        }
+    }
+}
+
 /// POST /api/v1/validate - 记录验证
 async fn validate_handler(
     State(state): State<AppState>,
@@ -271,6 +327,186 @@ async fn health_handler(State(state): State<AppState>) -> Json<HealthResponse> {
     })
 }
 
+/// POST /api/v1/evaluate-session - 评估会话并智能记录
+async fn evaluate_session_handler(
+    State(state): State<AppState>,
+    Json(req): Json<EvaluateSessionRequest>,
+) -> Result<Json<EvaluateSessionResponse>, HttpServerError> {
+    // 更新统计
+    {
+        let mut stats = state.stats.write().unwrap();
+        stats.increment_request("/api/v1/evaluate-session");
+    }
+
+    // 验证
+    validate_project_id(&req.project_id)?;
+
+    // 检查服务
+    let memory = state
+        .services
+        .memory
+        .as_ref()
+        .ok_or_else(|| HttpServerError::MemoryService("Memory service not configured".into()))?;
+
+    // 1. 不搜索 memory（避免与 pre-run 时的结果不一致）
+    // 注意：这意味着智能抑制策略（has_strong, skip_if_top1_score_ge）会被禁用
+    // 但在 Stop hook 场景下，pre-run 已经完成，shown_qa_ids 已经在 RunOutcome 中
+    // Gatekeeper 将主要基于 exit_code 和 shown/used QA IDs 做决策
+    let matches = vec![];
+
+    // 2. 构建 RunOutcome
+    use memex_core::api::RunOutcome;
+    let run_outcome = RunOutcome {
+        exit_code: req.exit_code,
+        duration_ms: Some(req.duration_ms),
+        stdout_tail: req.stdout.clone(),
+        stderr_tail: req.stderr.clone(),
+        tool_events: vec![], // 暂时为空，gatekeeper只使用exit_code和stdout
+        shown_qa_ids: req.shown_qa_ids.clone(),
+        used_qa_ids: req.used_qa_ids.clone(),
+    };
+
+    // 3. 构建 ToolEvent[] (从简化的ToolEventSimple转换)
+    use memex_core::api::ToolEvent;
+    let tool_events: Vec<ToolEvent> = req
+        .tool_events
+        .iter()
+        .enumerate()
+        .map(|(idx, te)| ToolEvent {
+            v: 1,
+            event_type: "tool".to_string(),
+            ts: None,
+            run_id: None,
+            id: Some(format!("tool-{}", idx)),
+            tool: Some(te.tool.clone()),
+            action: None,
+            args: te.args.clone(),
+            ok: te.code.map(|c| c == 0),
+            output: te.output.as_ref().map(|s| serde_json::Value::String(s.clone())),
+            error: None,
+            rationale: None,
+        })
+        .collect();
+
+    // 4. 读取 gatekeeper 配置（从 AppState 中获取）
+    use memex_core::api::GatekeeperConfig;
+    let gatekeeper_config = match &state.config.gatekeeper.provider {
+        memex_core::api::GatekeeperProvider::Standard(cfg) => GatekeeperConfig {
+            max_inject: cfg.max_inject,
+            min_level_inject: cfg.min_level_inject,
+            min_level_fallback: cfg.min_level_fallback,
+            min_trust_show: cfg.min_trust_show,
+            block_if_consecutive_fail_ge: cfg.block_if_consecutive_fail_ge,
+            skip_if_top1_score_ge: cfg.skip_if_top1_score_ge,
+            exclude_stale_by_default: cfg.exclude_stale_by_default,
+            active_statuses: cfg.active_statuses.clone(),
+            digest_head_chars: cfg.digest_head_chars,
+            digest_tail_chars: cfg.digest_tail_chars,
+        },
+    };
+
+    // 5. 调用 gatekeeper.evaluate()
+    use memex_core::api::Gatekeeper;
+    let decision = Gatekeeper::evaluate(
+        &gatekeeper_config,
+        Local::now(),
+        &matches,
+        &run_outcome,
+        &tool_events,
+    );
+
+    tracing::info!(
+        target: "memex.http",
+        "Gatekeeper decision: should_write_candidate={}, hit_refs={}, validate_plans={}",
+        decision.should_write_candidate,
+        decision.hit_refs.len(),
+        decision.validate_plans.len()
+    );
+
+    // 6. 记录 Hit
+    let mut hits_recorded = 0;
+    if !decision.hit_refs.is_empty() {
+        use memex_core::api::build_hit_payload;
+        if let Some(hit_payload) = build_hit_payload(&req.project_id, &decision) {
+            match memory.record_hit(hit_payload).await {
+                Ok(_) => {
+                    hits_recorded = decision.hit_refs.len();
+                    tracing::info!(target: "memex.http", "Recorded {} hits", hits_recorded);
+                }
+                Err(e) => {
+                    tracing::warn!(target: "memex.http", "Failed to record hits: {}", e);
+                }
+            }
+        }
+    }
+
+    // 7. 记录 Validation
+    let mut validations_recorded = 0;
+    use memex_core::api::build_validate_payloads;
+    let validate_payloads = build_validate_payloads(&req.project_id, &decision);
+    for payload in validate_payloads {
+        match memory.record_validation(payload).await {
+            Ok(_) => validations_recorded += 1,
+            Err(e) => {
+                tracing::warn!(target: "memex.http", "Failed to record validation: {}", e);
+            }
+        }
+    }
+
+    // 8. 记录 Candidate
+    let mut candidates_recorded = 0;
+    if decision.should_write_candidate {
+        // 从 stdout 提取候选答案
+        use memex_core::api::{build_candidate_payloads, extract_candidates, CandidateExtractConfig};
+        use memex_core::api::ToolEventLite;
+
+        // 从 AppState 中获取 candidate extract 配置
+        let extract_config = CandidateExtractConfig {
+            max_candidates: state.config.candidate_extract.max_candidates,
+            max_answer_chars: state.config.candidate_extract.max_answer_chars,
+            min_answer_chars: state.config.candidate_extract.min_answer_chars,
+            context_lines: state.config.candidate_extract.context_lines,
+            tool_steps_max: state.config.candidate_extract.tool_steps_max,
+            tool_step_args_keys_max: state.config.candidate_extract.tool_step_args_keys_max,
+            tool_step_value_max_chars: state.config.candidate_extract.tool_step_value_max_chars,
+            redact: state.config.candidate_extract.redact,
+            strict_secret_block: state.config.candidate_extract.strict_secret_block,
+            confidence: state.config.candidate_extract.confidence,
+        };
+
+        let tool_events_lite: Vec<ToolEventLite> =
+            tool_events.iter().map(|e| e.into()).collect();
+        let candidate_drafts = extract_candidates(
+            &extract_config,
+            &req.user_query,
+            &req.stdout,
+            &req.stderr,
+            &tool_events_lite,
+        );
+
+        let candidate_payloads = build_candidate_payloads(&req.project_id, &candidate_drafts);
+        for candidate_payload in candidate_payloads {
+            match memory.record_candidate(candidate_payload).await {
+                Ok(_) => candidates_recorded += 1,
+                Err(e) => {
+                    tracing::warn!(target: "memex.http", "Failed to record candidate: {}", e);
+                }
+            }
+        }
+    }
+
+    // 9. 返回响应
+    Ok(Json(EvaluateSessionResponse {
+        success: true,
+        decision_summary: Some(decision.reasons.join("; ")),
+        candidates_recorded,
+        hits_recorded,
+        validations_recorded,
+        error: None,
+        error_code: None,
+    }))
+}
+
 /// POST /api/v1/shutdown - 触发优雅关闭
 async fn shutdown_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
     // 发送关闭信号
@@ -285,10 +521,9 @@ async fn shutdown_handler(State(state): State<AppState>) -> Json<serde_json::Val
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::http::state::ServerStats;
     use async_trait::async_trait;
     use memex_core::api::{MemoryPlugin, SearchMatch, Services, TaskGradeResult};
-    use std::sync::{Arc, RwLock};
+    use std::sync::Arc;
     use tokio::sync::broadcast;
 
     // Mock MemoryPlugin
@@ -380,12 +615,10 @@ mod tests {
             )),
         };
 
-        AppState {
-            session_id: "test-session".into(),
-            services: Arc::new(services),
-            stats: Arc::new(RwLock::new(ServerStats::new())),
-            shutdown_tx,
-        }
+        // Create minimal test config
+        let config = memex_core::api::AppConfig::default();
+
+        AppState::new("test-session".into(), services, config, shutdown_tx)
     }
 
     #[tokio::test]
@@ -548,5 +781,44 @@ mod tests {
 
         let response = result.unwrap().0;
         assert!(response.success);
+    }
+
+    #[tokio::test]
+    async fn test_record_validation_handler_success() {
+        let state = create_test_state(true, false);
+        let req = RecordValidationRequest {
+            project_id: "test-project".into(),
+            qa_id: "qa-123".into(),
+            success: true,
+            confidence: 0.9,
+        };
+
+        let result = record_validation_handler(State(state), Json(req)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().0;
+        assert!(response.success);
+        assert!(response.message.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_record_validation_handler_no_memory() {
+        let state = create_test_state(false, false);
+        let req = RecordValidationRequest {
+            project_id: "test-project".into(),
+            qa_id: "qa-123".into(),
+            success: true,
+            confidence: 0.9,
+        };
+
+        let result = record_validation_handler(State(state), Json(req)).await;
+        assert!(result.is_err());
+
+        match result {
+            Err(HttpServerError::MemoryService(msg)) => {
+                assert!(msg.contains("not configured"));
+            }
+            _ => panic!("Expected MemoryService error"),
+        }
     }
 }

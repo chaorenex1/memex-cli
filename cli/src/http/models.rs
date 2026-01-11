@@ -101,6 +101,32 @@ pub struct ValidateResponse {
     pub error_code: Option<String>,
 }
 
+// ============= Record Validation =============
+
+#[derive(Debug, Deserialize)]
+pub struct RecordValidationRequest {
+    pub project_id: String,
+    pub qa_id: String,
+    pub success: bool,
+    #[serde(default = "default_confidence")]
+    pub confidence: f32,
+}
+
+fn default_confidence() -> f32 {
+    0.8
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecordValidationResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+}
+
 // ============= Health =============
 
 #[derive(Debug, Serialize)]
@@ -177,6 +203,16 @@ mod tests {
     }
 
     #[test]
+    fn test_record_validation_request_defaults() {
+        let json = r#"{"project_id":"proj1","qa_id":"qa1","success":true}"#;
+        let req: RecordValidationRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.project_id, "proj1");
+        assert_eq!(req.qa_id, "qa1");
+        assert!(req.success);
+        assert_eq!(req.confidence, 0.8);
+    }
+
+    #[test]
     fn test_search_response_serialize() {
         let resp = SearchResponse {
             success: true,
@@ -189,4 +225,48 @@ mod tests {
         assert!(json.contains("\"count\":5"));
         assert!(!json.contains("\"error\""));
     }
+}
+
+// ============= Evaluate Session =============
+
+/// Tool event from transcript (simplified for HTTP API)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ToolEventSimple {
+    pub tool: String,
+    #[serde(default)]
+    pub args: serde_json::Value,
+    #[serde(default)]
+    pub output: Option<String>,
+    #[serde(default)]
+    pub code: Option<i32>,
+}
+
+/// Evaluate session request with parsed transcript data
+#[derive(Debug, Deserialize)]
+pub struct EvaluateSessionRequest {
+    pub project_id: String,
+    pub user_query: String,
+    pub tool_events: Vec<ToolEventSimple>,
+    pub stdout: String,
+    pub stderr: String,
+    pub shown_qa_ids: Vec<String>,
+    pub used_qa_ids: Vec<String>,
+    pub exit_code: i32,
+    #[serde(default)]
+    pub duration_ms: u64,
+}
+
+/// Evaluate session response with gatekeeper decision
+#[derive(Debug, Serialize)]
+pub struct EvaluateSessionResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision_summary: Option<String>,
+    pub candidates_recorded: usize,
+    pub hits_recorded: usize,
+    pub validations_recorded: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
 }

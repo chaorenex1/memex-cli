@@ -21,14 +21,14 @@ fn get_servers_dir() -> Result<PathBuf, CliError> {
 /// 写入服务器状态文件
 fn write_state_file(session_id: &str, port: u16, host: &str) -> Result<(), CliError> {
     let servers_dir = get_servers_dir()?;
-    let state_file = servers_dir.join(format!("memex-{}.state", session_id));
+    let state_file = servers_dir.join("memex.state");
 
     let state = serde_json::json!({
         "session_id": session_id,
         "port": port,
         "pid": std::process::id(),
         "url": format!("http://{}:{}", host, port),
-        "started_at": chrono::Utc::now().to_rfc3339()
+        "started_at": chrono::Local::now().to_rfc3339()
     });
 
     fs::write(&state_file, serde_json::to_string_pretty(&state).unwrap())
@@ -67,8 +67,13 @@ pub async fn handle_http_server(args: HttpServerArgs, ctx: &AppContext) -> Resul
     // 创建 shutdown channel
     let (shutdown_tx, _) = broadcast::channel(1);
 
-    // 创建 AppState
-    let state = AppState::new(session_id.clone(), services, shutdown_tx);
+    // 创建 AppState（传入完整配置）
+    let state = AppState::new(
+        session_id.clone(),
+        services,
+        ctx.cfg().clone(),
+        shutdown_tx,
+    );
 
     // 写入状态文件（在服务器启动前）
     write_state_file(&session_id, port, &host)?;
@@ -81,7 +86,7 @@ pub async fn handle_http_server(args: HttpServerArgs, ctx: &AppContext) -> Resul
         session_id
     );
 
-    server::start_server(session_id, port, state)
+    server::start_server(session_id, host, port, state)
         .await
         .map_err(|e| CliError::Command(e.to_string()))?;
 

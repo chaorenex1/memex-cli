@@ -1,7 +1,7 @@
 //! HTTP服务器状态管理
 
 use chrono::{DateTime, Local};
-use memex_core::api::Services;
+use memex_core::api::{AppConfig, Services};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::broadcast;
@@ -11,15 +11,22 @@ use tokio::sync::broadcast;
 pub struct AppState {
     pub session_id: String,
     pub services: Arc<Services>,
+    pub config: Arc<AppConfig>,
     pub stats: Arc<RwLock<ServerStats>>,
     pub shutdown_tx: broadcast::Sender<()>,
 }
 
 impl AppState {
-    pub fn new(session_id: String, services: Services, shutdown_tx: broadcast::Sender<()>) -> Self {
+    pub fn new(
+        session_id: String,
+        services: Services,
+        config: AppConfig,
+        shutdown_tx: broadcast::Sender<()>,
+    ) -> Self {
         Self {
             session_id,
             services: Arc::new(services),
+            config: Arc::new(config),
             stats: Arc::new(RwLock::new(ServerStats::new())),
             shutdown_tx,
         }
