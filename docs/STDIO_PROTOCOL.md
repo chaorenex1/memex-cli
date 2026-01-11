@@ -376,11 +376,11 @@ func GenerateTaskID(prefix string) string {
 
 **Rust:**
 ```rust
-use chrono::Utc;
+use chrono::Local;
 use rand::Rng;
 
 fn generate_task_id(prefix: Option<&str>) -> String {
-    let ts = Utc::now().format("%Y%m%d%H%M%S");
+    let ts = Local::now().format("%Y%m%d%H%M%S");
     let suffix: u16 = rand::thread_rng().gen();
     let prefix = prefix.unwrap_or("task");
     format!("{}-{}-{:04x}", prefix, ts, suffix)
