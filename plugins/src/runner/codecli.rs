@@ -46,12 +46,23 @@ impl RunnerPlugin for CodeCliRunnerPlugin {
             }
         }
 
-        // Windows: 防止弹出控制台窗口
+        // Windows: 设置 UTF-8 环境以避免中文乱码
         #[cfg(windows)]
         {
+            // 设置代码页为 UTF-8 (65001)
+            // 注意：某些旧版 Windows 工具可能不支持此设置
+            cmd.env("CHCP", "65001");
+
+            // 设置 locale 环境变量（供支持的工具使用）
+            cmd.env("LANG", "en_US.UTF-8");
+            cmd.env("LC_ALL", "en_US.UTF-8");
+
+            // 防止弹出控制台窗口
             const CREATE_NO_WINDOW: u32 = 0x08000000;
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
+
+        // Unix 系统默认使用 UTF-8，无需额外设置
 
         let child = cmd.spawn()?;
 

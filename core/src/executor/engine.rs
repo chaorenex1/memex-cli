@@ -849,6 +849,7 @@ where
                 backend_kind: &backend_kind,
                 stream_format: &input.stream_format,
                 abort_rx: Some(abort_rx),
+                stdin_payload: input.stdin_payload.clone(),
             })
             .await?;
 

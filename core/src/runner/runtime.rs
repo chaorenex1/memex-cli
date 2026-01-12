@@ -55,6 +55,7 @@ pub struct RunSessionRuntimeInput<'a> {
     pub backend_kind: &'a str,
     pub stream_format: &'a str,
     pub abort_rx: Option<mpsc::Receiver<String>>,
+    pub stdin_payload: Option<String>,
 }
 
 pub async fn run_session_runtime(
@@ -71,6 +72,7 @@ pub async fn run_session_runtime(
         backend_kind,
         stream_format,
         mut abort_rx,
+        stdin_payload,
     } = input;
     let _span = tracing::info_span!(
         "core.run_session",
@@ -88,9 +90,16 @@ pub async fn run_session_runtime(
     let stderr = session
         .stderr()
         .ok_or_else(|| RunnerError::Spawn("no stderr".into()))?;
-    let stdin = session
+    let mut stdin = session
         .stdin()
         .ok_or_else(|| RunnerError::Spawn("no stdin".into()))?;
+
+    if let Some(payload) = stdin_payload.as_deref() {
+        if !payload.is_empty() {
+            let _ = stdin.write_all(payload.as_bytes()).await;
+            let _ = stdin.flush().await;
+        }
+    }
 
     let ring_out = RingBytes::new(capture_bytes);
     let ring_err = RingBytes::new(capture_bytes);

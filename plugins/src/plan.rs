@@ -100,6 +100,7 @@ pub fn build_runner_spec(
                 args,
                 envs: base_envs,
                 cwd: None,
+                stdin_payload: None,
             };
             Ok((
                 core_api::RunnerSpec::Passthrough {

@@ -36,6 +36,8 @@ pub struct RunnerStartArgs {
     ///
     /// When set, runner implementations should call `Command::current_dir`.
     pub cwd: Option<String>,
+    /// Optional payload written to stdin before the session starts.
+    pub stdin_payload: Option<String>,
 }
 
 #[derive(Debug, Clone)]

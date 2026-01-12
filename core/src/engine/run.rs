@@ -137,6 +137,7 @@ where
             }
         }
     }
+    let stdin_payload = session_args.stdin_payload.clone();
     // Start Session
     let session = match runner.start_session(&session_args).await {
         Ok(session) => session,
@@ -166,6 +167,7 @@ where
         events_out_tx: events_out_tx.clone(),
         backend_kind: cfg.backend_kind,
         stream_format: stream_format.clone(),
+        stdin_payload,
     };
 
     // Run Session (runner runtime is in core; caller may provide a custom session loop, e.g. TUI).
