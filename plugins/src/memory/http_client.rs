@@ -149,7 +149,10 @@ impl HttpClient {
         Ok(())
     }
 
-    pub async fn send_candidate(&self, payload: core_api::QACandidatePayload) -> anyhow::Result<()> {
+    pub async fn send_candidate(
+        &self,
+        payload: core_api::QACandidatePayload,
+    ) -> anyhow::Result<()> {
         let url = format!("{}/v1/qa/candidates", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",
