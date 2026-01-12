@@ -85,6 +85,7 @@ pub async fn run_app_with_config(
             run_args.as_ref(),
             &mut cfg,
             events_out_tx,
+            ctx,
             run_id,
             recover_run_id.clone(),
             &stream_format,
