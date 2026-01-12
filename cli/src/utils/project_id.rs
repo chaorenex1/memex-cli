@@ -1,7 +1,6 @@
-///! Project ID generation utilities
-///!
-///! Provides cross-platform path normalization for generating consistent project IDs.
-
+//! Project ID generation utilities
+//!
+//! Provides cross-platform path normalization for generating consistent project IDs.
 use std::path::Path;
 
 /// Generate project_id from directory path
@@ -40,24 +39,25 @@ pub fn generate_project_id(path: &Path) -> String {
     let normalized = path_str.to_lowercase();
 
     // Check for Windows drive letter
-    let (drive_letter, rest_path) = if normalized.len() >= 2 && normalized.chars().nth(1) == Some(':') {
-        let drive = normalized.chars().next().unwrap();
-        let rest = if normalized.len() > 3 {
-            &normalized[3..]  // Skip "C:\\" or "C:/"
+    let (drive_letter, rest_path) =
+        if normalized.len() >= 2 && normalized.chars().nth(1) == Some(':') {
+            let drive = normalized.chars().next().unwrap();
+            let rest = if normalized.len() > 3 {
+                &normalized[3..] // Skip "C:\\" or "C:/"
+            } else {
+                ""
+            };
+            (Some(drive), rest.to_string())
+        } else if let Some(stripped) = normalized.strip_prefix('/') {
+            // Unix: remove leading "/"
+            (None, stripped.to_string())
         } else {
-            ""
+            // Relative path
+            (None, normalized)
         };
-        (Some(drive), rest.to_string())
-    } else if normalized.starts_with('/') {
-        // Unix: remove leading "/"
-        (None, normalized[1..].to_string())
-    } else {
-        // Relative path
-        (None, normalized)
-    };
 
     // Replace path separators with "-"
-    let mut sanitized = rest_path.replace('\\', "-").replace('/', "-");
+    let mut sanitized = rest_path.replace(['\\', '/'], "-");
 
     // Sanitize (replace special chars, limit length, etc.)
     sanitized = sanitize_project_id(&sanitized);
@@ -69,12 +69,10 @@ pub fn generate_project_id(path: &Path) -> String {
         } else {
             format!("{}--", drive)
         }
+    } else if sanitized.is_empty() {
+        "default".to_string()
     } else {
-        if sanitized.is_empty() {
-            "default".to_string()
-        } else {
-            sanitized
-        }
+        sanitized
     }
 }
 
@@ -117,7 +115,9 @@ fn sanitize_project_id(raw_id: &str) -> String {
     }
 
     // Strip leading/trailing special chars
-    sanitized = sanitized.trim_matches(|c: char| c == '_' || c == '-').to_string();
+    sanitized = sanitized
+        .trim_matches(|c: char| c == '_' || c == '-')
+        .to_string();
 
     // Limit length
     if sanitized.len() > 64 {
@@ -148,28 +148,19 @@ mod tests {
     #[test]
     fn test_unix_path() {
         let path = PathBuf::from("/home/user/projects/my-app");
-        assert_eq!(
-            generate_project_id(&path),
-            "home-user-projects-my-app"
-        );
+        assert_eq!(generate_project_id(&path), "home-user-projects-my-app");
     }
 
     #[test]
     fn test_path_with_spaces() {
         let path = PathBuf::from(r"D:\Code\Test Project");
-        assert_eq!(
-            generate_project_id(&path),
-            "d--code-test_project"
-        );
+        assert_eq!(generate_project_id(&path), "d--code-test_project");
     }
 
     #[test]
     fn test_unix_root_path() {
         let path = PathBuf::from("/var/www/html");
-        assert_eq!(
-            generate_project_id(&path),
-            "var-www-html"
-        );
+        assert_eq!(generate_project_id(&path), "var-www-html");
     }
 
     #[test]
