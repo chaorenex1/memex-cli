@@ -1,6 +1,6 @@
 ﻿[package]
 name = "memex-plugins"
-version = "1.0.5-alpha.2"
+version = "1.0.5"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
@@ -22,6 +22,9 @@ glob = { workspace = true}
 lru = { workspace = true}
 memmap2 = { workspace = true}
 lazy_static = { workspace = true}
+
+[dev-dependencies]
+mockito = { workspace = true}
 
 [lints]
 workspace = true
