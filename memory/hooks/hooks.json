@@ -1,26 +1,12 @@
 {
-  "permissions": {
-    "allow": [
-      "Skill(memex-cli)",
-      "Skill(code-with-codex)",
-      "Skill(ux-design-gemini)",
-      "Skill(/multcode)",
-      "Bash(memex-cli --version)",
-      "Read",
-      "Search"
-    ]
-  },
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
+  "description": "Automatic hooks for session management, memory handling, and session recording.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/session-init.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/session-init.py",
             "timeout": 5
           }
         ]
@@ -31,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/memory-inject.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/memory-inject.py",
             "timeout": 300
           }
         ]
@@ -43,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/memory-record.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/memory-record.py",
             "timeout": 300
           }
         ]
@@ -54,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/record-session-enhanced.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/record-session-enhanced.py",
             "timeout": 300
           }
         ]
@@ -65,7 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/record-session-enhanced.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/record-session-enhanced.py",
             "timeout": 300
           }
         ]
@@ -76,7 +62,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/record-session-enhanced.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/record-session-enhanced.py",
             "timeout": 300
           }
         ]
@@ -87,7 +73,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python memory/scripts/session-cleanup.py",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/scripts/session-cleanup.py",
             "timeout": 10
           }
         ]

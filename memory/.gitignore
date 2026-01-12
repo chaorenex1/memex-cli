@@ -1,0 +1,13 @@
+# User-specific settings
+.claude/*.local.md
+
+# Python cache
+scripts/__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
