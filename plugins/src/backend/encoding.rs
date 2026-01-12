@@ -104,7 +104,11 @@ pub fn detect_encoding_strategy(prompt: &str) -> EncodingStrategy {
     const MAX_ARG_LENGTH: usize = 8000;
     if prompt.len() > MAX_ARG_LENGTH {
         return EncodingStrategy::ForceStdin {
-            reason: format!("Exceeds max argument length ({} > {})", prompt.len(), MAX_ARG_LENGTH),
+            reason: format!(
+                "Exceeds max argument length ({} > {})",
+                prompt.len(),
+                MAX_ARG_LENGTH
+            ),
         };
     }
 
@@ -248,7 +252,7 @@ mod tests {
             "echo test",
             "This is a simple ASCII prompt.",
             "123 456 789",
-            "Safe chars: !@#$*()_+-=[]{}:',.",  // Removed shell metacharacters: %^&|<>"
+            "Safe chars: !@#$*()_+-=[]{}:',.", // Removed shell metacharacters: %^&|<>"
         ];
 
         for prompt in prompts {
@@ -266,7 +270,10 @@ mod tests {
     fn test_special_ascii_chars_documented() {
         // Document which ASCII special chars force stdin
         // This serves as documentation of the current behavior
-        let safe_chars = vec!['!', '@', '#', '$', '*', '(', ')', '_', '+', '-', '=', '[', ']', '{', '}', ':', '\'', ',', '.', '?', '/'];
+        let safe_chars = vec![
+            '!', '@', '#', '$', '*', '(', ')', '_', '+', '-', '=', '[', ']', '{', '}', ':', '\'',
+            ',', '.', '?', '/',
+        ];
         let unsafe_chars = vec!['%', '^', '&', '|', '<', '>', '"'];
 
         for ch in safe_chars {
@@ -602,4 +609,3 @@ mod tests {
         }
     }
 }
-

@@ -1,9 +1,9 @@
 //! 标准（非 TUI）执行流：解析用户输入、调用 planner 生成 `RunnerSpec`，通过 core 引擎执行一次会话。
 use crate::commands::cli::{Args, RunArgs};
 use crate::stdio::{execute_stdio_tasks, read_stdin_text};
-use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
 use crate::task_level::infer_task_level;
 use memex_core::api as core_api;
+use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
 
 pub async fn run_standard_flow(
     args: &Args,
@@ -109,7 +109,6 @@ fn read_raw_input(
     Ok(prompt_text.unwrap_or_else(|| args.codecli_args.join(" ")))
 }
 
-
 /// Parses raw input into a list of StdioTask using InputParser
 fn parse_input_to_tasks(
     raw_input: &str,
@@ -210,7 +209,9 @@ async fn build_plan_request(
                 (
                     t.backend.clone(),
                     t.model.clone().or_else(|| ra.model.clone()),
-                    t.model_provider.clone().or_else(|| ra.model_provider.clone()),
+                    t.model_provider
+                        .clone()
+                        .or_else(|| ra.model_provider.clone()),
                     Some(t.workdir.clone()),
                 )
             } else {

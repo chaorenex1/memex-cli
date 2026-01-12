@@ -1,4 +1,19 @@
 {
+  "permissions": {
+    "allow": [
+      "Skill(memex-cli)",
+      "Skill(code-with-codex)",
+      "Skill(ux-design-gemini)",
+      "Skill(/multcode)",
+      "Bash(memex-cli --version)",
+      "Read",
+      "Search"
+    ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -35,6 +50,28 @@
       }
     ],
     "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/record-session-enhanced.py",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/record-session-enhanced.py",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
       {
         "hooks": [
           {
