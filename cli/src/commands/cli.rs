@@ -275,7 +275,6 @@ pub struct HttpServerArgs {
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
-    Stdio(StdioArgs),
     Replay(ReplayArgs),
     Resume(ResumeArgs),
     Search(SearchArgs),
@@ -284,35 +283,4 @@ pub enum Commands {
     RecordValidation(RecordValidationArgs),
     RecordSession(RecordSessionArgs),
     HttpServer(HttpServerArgs),
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct StdioArgs {
-    /// Read STDIO tasks from file (defaults to stdin)
-    #[arg(long)]
-    pub input_file: Option<String>,
-
-    /// Default stream format override (task-level can override)
-    #[arg(long, default_value = "text")]
-    pub stream_format: String,
-
-    /// Use ASCII markers in text output
-    #[arg(long, default_value_t = false)]
-    pub ascii: bool,
-
-    /// Verbose status output (text mode only)
-    #[arg(long, default_value_t = false)]
-    pub verbose: bool,
-
-    /// Quiet output (text mode only; prints assistant output only)
-    #[arg(long, default_value_t = false)]
-    pub quiet: bool,
-
-    /// Resume from a previous run (requires --run-id and --events-file)
-    #[arg(long)]
-    pub run_id: Option<String>,
-
-    /// Events file to load context from (for resume)
-    #[arg(long)]
-    pub events_file: Option<String>,
 }

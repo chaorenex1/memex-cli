@@ -145,12 +145,6 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
             memex_cli::commands::http_server::handle_http_server(http_args, &ctx).await?;
             Ok(0)
         }
-        cli::Commands::Stdio(stdio_args) => {
-            let exit =
-                memex_cli::commands::stdio::handle_stdio(stdio_args, args.capture_bytes, &ctx)
-                    .await?;
-            Ok(exit)
-        }
     }
 }
 
