@@ -23,6 +23,7 @@ pub struct RunSessionArgs<'a> {
     pub backend_kind: &'a str,
     pub stream_format: &'a str,
     pub abort_rx: Option<mpsc::Receiver<String>>,
+    pub stdin_payload: Option<String>,
 }
 
 pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, RunnerError> {
@@ -37,6 +38,7 @@ pub async fn run_session(args: RunSessionArgs<'_>) -> Result<RunnerResult, Runne
         backend_kind: args.backend_kind,
         stream_format: args.stream_format,
         abort_rx: args.abort_rx,
+        stdin_payload: args.stdin_payload,
     })
     .await
 }

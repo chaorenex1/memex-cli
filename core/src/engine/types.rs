@@ -16,6 +16,7 @@ pub struct RunSessionInput {
     pub events_out_tx: Option<EventsOutTx>,
     pub backend_kind: BackendKind,
     pub stream_format: String,
+    pub stdin_payload: Option<String>,
 }
 
 pub enum RunnerSpec {

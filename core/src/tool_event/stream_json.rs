@@ -135,7 +135,7 @@ impl StreamJsonToolEventParser {
 
                     if item.get("type").and_then(|x| x.as_str()) == Some("thinking") {
                         let mut content = item
-                            .get("text")
+                            .get("thinking")
                             .and_then(|x| x.as_str())
                             .map(|x| x.to_string())
                             .unwrap_or_default();

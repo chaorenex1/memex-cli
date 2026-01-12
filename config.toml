@@ -48,7 +48,67 @@ denylist = [
 
 allowlist = [
   { tool = "fs.read", action = "read", reason = "read is allowed" },
-  { tool = "git.*", reason = "git commands allowed" }
+  { tool = "git.*", reason = "git commands allowed" },
+
+  # 文件查看命令（只读，安全）
+  { tool = "bash.ls", reason = "list files" },
+  { tool = "bash.cat", reason = "view file contents" },
+  { tool = "bash.head", reason = "view file head" },
+  { tool = "bash.tail", reason = "view file tail" },
+  { tool = "bash.less", reason = "view file with pager" },
+  { tool = "bash.more", reason = "view file with pager" },
+
+  # 搜索命令（只读，安全）
+  { tool = "bash.grep", reason = "search file contents" },
+  { tool = "bash.find", reason = "find files" },
+  { tool = "bash.locate", reason = "locate files" },
+  { tool = "bash.which", reason = "locate command" },
+  { tool = "bash.whereis", reason = "locate binary/source/man" },
+
+  # 目录操作（只读，安全）
+  { tool = "bash.pwd", reason = "print working directory" },
+  { tool = "bash.cd", reason = "change directory" },
+  { tool = "bash.tree", reason = "display directory tree" },
+
+  # 输出命令（安全）
+  { tool = "bash.echo", reason = "print text" },
+  { tool = "bash.printf", reason = "formatted print" },
+
+  # 系统信息（只读，安全）
+  { tool = "bash.date", reason = "show date/time" },
+  { tool = "bash.cal", reason = "show calendar" },
+  { tool = "bash.env", reason = "show environment" },
+  { tool = "bash.printenv", reason = "print environment" },
+  { tool = "bash.whoami", reason = "show current user" },
+  { tool = "bash.hostname", reason = "show hostname" },
+  { tool = "bash.uname", reason = "show system info" },
+
+  # 文件信息（只读，安全）
+  { tool = "bash.stat", reason = "file statistics" },
+  { tool = "bash.file", reason = "determine file type" },
+  { tool = "bash.wc", reason = "word count" },
+  { tool = "bash.du", reason = "disk usage" },
+  { tool = "bash.df", reason = "disk free space" },
+
+  # 文本处理（安全）
+  { tool = "bash.sort", reason = "sort lines" },
+  { tool = "bash.uniq", reason = "unique lines" },
+  { tool = "bash.cut", reason = "cut fields" },
+  { tool = "bash.sed", reason = "stream editor" },
+  { tool = "bash.awk", reason = "text processing" },
+  { tool = "bash.tr", reason = "translate characters" },
+
+  # 压缩/归档查看（只读操作）
+  { tool = "bash.tar", reason = "archive operations (read-only)" },
+  { tool = "bash.gzip", reason = "compression" },
+  { tool = "bash.gunzip", reason = "decompression" },
+  { tool = "bash.zip", reason = "zip operations" },
+  { tool = "bash.unzip", reason = "unzip operations" },
+
+  # 进程查看（只读，安全）
+  { tool = "bash.ps", reason = "process status" },
+  { tool = "bash.top", reason = "process monitor" },
+  { tool = "bash.htop", reason = "interactive process viewer" },
 ]
 
 [memory]
@@ -129,3 +189,34 @@ enable_file_cache = false            # File cache (default off to avoid memory u
 file_cache_size = 100                # Cache entries count
 enable_mmap_large_files = true       # Use mmap for large files (Level 3.1)
 mmap_threshold_mb = 10               # mmap threshold (MB)
+
+[executor]
+# Default values (defined in core/src/executor/types/config.rs)
+
+[executor.file_processing]
+enabled = true
+enable_mmap = true
+mmap_threshold_mb = 10
+enable_cache = true
+cache_size = 100
+max_files = 100
+max_total_size_mb = 200
+
+[executor.output]
+format = "jsonl"       # or "text"
+pretty_print = false
+ascii_only = false
+
+[executor.retry]
+strategy = "exponential-backoff"
+base_delay_ms = 100
+max_delay_ms = 5000
+max_attempts = 3
+
+[executor.concurrency]
+strategy = "adaptive"
+min_concurrency = 2
+max_concurrency = 32
+base_concurrency = 8
+cpu_threshold_low = 50.0
+cpu_threshold_high = 80.0

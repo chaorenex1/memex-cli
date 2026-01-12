@@ -90,6 +90,75 @@ gemini:
 memex-cli run --backend "gemini" --prompt "10道四则运算题,写入文件" --stream-format "text"
 ```
 
+### 🆕 结构化文本输入 (v1.0.5+)
+
+Memex-CLI 支持两种输入模式：
+
+#### 普通文本模式 (`--no-structured-text`)
+
+适用于简单的单个提示词：
+
+```bash
+# 简单提示
+memex-cli run \
+  --backend codex \
+  --no-structured-text \
+  --prompt "编写一个快速排序算法"
+
+# 从文件读取
+cat query.txt | memex-cli run \
+  --backend claude \
+  --no-structured-text \
+  --stdin
+```
+
+#### 结构化模式（默认）
+
+支持多任务工作流，任务间可定义依赖关系：
+
+```bash
+cat > workflow.txt <<'EOF'
+---TASK---
+id: design-api
+backend: claude
+workdir: /project
+model: claude-sonnet-4
+---CONTENT---
+设计用户认证 API 接口规范
+---END---
+
+---TASK---
+id: implement-api
+backend: codex
+workdir: /project
+dependencies: design-api
+---CONTENT---
+根据设计文档实现 API 代码
+---END---
+
+---TASK---
+id: write-tests
+backend: codex
+workdir: /project
+dependencies: implement-api
+---CONTENT---
+编写单元测试和集成测试
+---END---
+EOF
+
+# 执行完整工作流
+memex-cli run --backend codex --stdin < workflow.txt
+```
+
+**特性**：
+- ✅ 任务依赖管理（自动按拓扑顺序执行）
+- ✅ 不同任务使用不同 backend/model
+- ✅ 循环依赖检测
+- ✅ 文件引用支持
+- ✅ 重试和超时配置
+
+**更多示例**：查看 [`examples/`](./examples/) 目录。
+
 
 ### 3) 回放 / 续跑
 
@@ -206,6 +275,6 @@ memex-cli record-session \
 
 ```bash
 cargo fmt --all
-cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```

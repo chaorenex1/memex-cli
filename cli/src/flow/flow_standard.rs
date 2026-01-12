@@ -1,5 +1,6 @@
 //! 标准（非 TUI）执行流：解析用户输入、调用 planner 生成 `RunnerSpec`，通过 core 引擎执行一次会话。
 use crate::commands::cli::{Args, RunArgs};
+use crate::stdio::{execute_stdio_tasks, read_stdin_text};
 use crate::task_level::infer_task_level;
 use memex_core::api as core_api;
 use memex_plugins::plan::{build_runner_spec, PlanMode, PlanRequest};
@@ -9,59 +10,81 @@ pub async fn run_standard_flow(
     run_args: Option<&RunArgs>,
     cfg: &mut core_api::AppConfig,
     events_out_tx: Option<core_api::EventsOutTx>,
+    ctx: &core_api::AppContext,
     run_id: String,
     recover_run_id: Option<String>,
     stream_format: &str,
     project_id: &str,
     services: &core_api::Services,
 ) -> Result<i32, core_api::RunnerError> {
-    let user_query = resolve_user_query(args, run_args)?;
-    let plan_req = build_plan_request(
-        services,
-        args,
-        run_args,
-        recover_run_id,
-        stream_format,
-        project_id,
-        &user_query,
-    )
-    .await;
-    let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
+    // Step 1: Read raw input from all sources
+    let raw_input = read_raw_input(args, run_args)?;
 
-    core_api::run_with_query(
-        core_api::RunWithQueryArgs {
-            user_query,
-            cfg: cfg.clone(),
-            runner: runner_spec,
-            run_id,
-            capture_bytes: args.capture_bytes,
-            stream_format: stream_format.to_string(),
-            project_id: project_id.to_string(),
-            events_out_tx,
-            services: services.clone(),
-            wrapper_start_data: start_data,
-        },
-        |input| async move {
-            let backend_kind_str = input.backend_kind.to_string();
-            core_api::run_session(core_api::RunSessionArgs {
-                session: input.session,
-                control: &input.control,
-                policy: input.policy,
-                capture_bytes: input.capture_bytes,
-                events_out: input.events_out_tx,
-                event_tx: None,
-                run_id: &input.run_id,
-                backend_kind: &backend_kind_str,
-                stream_format: &input.stream_format,
-                abort_rx: None,
-            })
-            .await
-        },
-    )
-    .await
+    // Step 2: Parse input into tasks (structured or plain text mode)
+    let tasks = parse_input_to_tasks(&raw_input, run_args)?;
+
+    // Step 3: Route based on task count
+    if tasks.len() == 1 {
+        // Single task: extract content and use original flow
+        let user_query = tasks[0].content.clone();
+
+        let plan_req = build_plan_request(
+            services,
+            args,
+            run_args,
+            recover_run_id,
+            stream_format,
+            project_id,
+            &user_query,
+            Some(&tasks[0]),
+        )
+        .await;
+        let (runner_spec, start_data) = build_runner_spec(cfg, plan_req)?;
+
+        core_api::run_with_query(
+            core_api::RunWithQueryArgs {
+                user_query,
+                cfg: cfg.clone(),
+                runner: runner_spec,
+                run_id,
+                capture_bytes: args.capture_bytes,
+                stream_format: stream_format.to_string(),
+                project_id: project_id.to_string(),
+                events_out_tx,
+                services: services.clone(),
+                wrapper_start_data: start_data,
+            },
+            |input| async move {
+                let backend_kind_str = input.backend_kind.to_string();
+                core_api::run_session(core_api::RunSessionArgs {
+                    session: input.session,
+                    control: &input.control,
+                    policy: input.policy,
+                    capture_bytes: input.capture_bytes,
+                    events_out: input.events_out_tx,
+                    event_tx: None,
+                    run_id: &input.run_id,
+                    backend_kind: &backend_kind_str,
+                    stream_format: &input.stream_format,
+                    abort_rx: None,
+                    stdin_payload: input.stdin_payload.clone(),
+                })
+                .await
+            },
+        )
+        .await
+    } else {
+        // Multiple tasks: use run_stdio
+        tracing::info!(
+            "Parsed {} tasks from structured input, using STDIO executor",
+            tasks.len()
+        );
+        run_multi_tasks(tasks, args, cfg, stream_format, services, ctx).await
+    }
 }
 
-fn resolve_user_query(
+/// Reads raw input from all possible sources (--prompt, --prompt-file, --stdin, args)
+fn read_raw_input(
     args: &Args,
     run_args: Option<&RunArgs>,
 ) -> Result<String, core_api::RunnerError> {
@@ -76,9 +99,7 @@ fn resolve_user_query(
             })?;
             prompt_text = Some(content);
         } else if ra.stdin {
-            use std::io::Read;
-            let mut content = String::new();
-            std::io::stdin().read_to_string(&mut content).map_err(|e| {
+            let content = read_stdin_text().map_err(|e| {
                 core_api::RunnerError::Spawn(format!("failed to read prompt from stdin: {}", e))
             })?;
             prompt_text = Some(content);
@@ -86,6 +107,89 @@ fn resolve_user_query(
     }
 
     Ok(prompt_text.unwrap_or_else(|| args.codecli_args.join(" ")))
+}
+
+/// Parses raw input into a list of StdioTask using InputParser
+fn parse_input_to_tasks(
+    raw_input: &str,
+    run_args: Option<&RunArgs>,
+) -> Result<Vec<core_api::StdioTask>, core_api::RunnerError> {
+    // Determine structured mode (default: true)
+    let structured = run_args.map(|ra| ra.structured_text).unwrap_or(true);
+
+    // Extract defaults for plain text mode
+    let default_backend = run_args
+        .map(|ra| ra.backend.clone())
+        .unwrap_or_else(|| "codex".to_string());
+
+    let default_workdir = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| ".".to_string());
+
+    let default_model = run_args.and_then(|ra| ra.model.clone());
+
+    let default_stream_format = run_args
+        .map(|ra| ra.stream_format.clone())
+        .unwrap_or_else(|| "text".to_string());
+
+    // Parse using InputParser
+    core_api::InputParser::parse(
+        raw_input,
+        structured,
+        &default_backend,
+        &default_workdir,
+        default_model,
+        &default_stream_format,
+    )
+    .map_err(|e| core_api::RunnerError::Spawn(format!("failed to parse input into tasks: {}", e)))
+}
+
+/// Executes multiple tasks using new executor with dependency graph support
+async fn run_multi_tasks(
+    mut tasks: Vec<core_api::StdioTask>,
+    args: &Args,
+    cfg: &mut core_api::AppConfig,
+    stream_format: &str,
+    _services: &core_api::Services,
+    ctx: &core_api::AppContext,
+) -> Result<i32, core_api::RunnerError> {
+    // Build AppContext
+    let ctx = ctx.with_config(cfg.clone());
+
+    for t in tasks.iter_mut() {
+        t.stream_format = stream_format.to_string();
+    }
+
+    let stdio_opts = core_api::StdioRunOpts {
+        stream_format: stream_format.to_string(),
+        capture_bytes: args.capture_bytes,
+        verbose: false,
+        quiet: false,
+        ascii: false,
+        resume_run_id: None,
+        resume_context: None,
+    };
+
+    let result = execute_stdio_tasks(tasks, &ctx, stdio_opts, None)
+        .await
+        .map_err(|e| core_api::RunnerError::Stdio(e.to_string()))?;
+
+    // Convert ExecutionResult to exit code
+    if result.failed > 0 {
+        tracing::error!(
+            "❌ Execution failed: {}/{} tasks failed",
+            result.failed,
+            result.total_tasks
+        );
+        Ok(1)
+    } else {
+        tracing::info!(
+            "✅ Execution successful: {} tasks completed in {}ms",
+            result.completed,
+            result.duration_ms
+        );
+        Ok(0)
+    }
 }
 
 async fn build_plan_request(
@@ -96,16 +200,42 @@ async fn build_plan_request(
     stream_format: &str,
     project_id: &str,
     user_query: &str,
+    task: Option<&core_api::StdioTask>,
 ) -> PlanRequest {
     let mode = match run_args {
         Some(ra) => {
             let backend_kind = ra.backend_kind.map(Into::into);
+            let (backend_spec, model, model_provider, task_project_id) = if let Some(t) = task {
+                (
+                    t.backend.clone(),
+                    t.model.clone().or_else(|| ra.model.clone()),
+                    t.model_provider
+                        .clone()
+                        .or_else(|| ra.model_provider.clone()),
+                    Some(t.workdir.clone()),
+                )
+            } else {
+                (
+                    ra.backend.clone(),
+                    ra.model.clone(),
+                    ra.model_provider.clone(),
+                    Some(project_id.to_string()),
+                )
+            };
 
-            if ra.backend == "codex" && ra.model_provider.is_some() {
+            tracing::info!(
+                "Single-task plan overrides: backend={}, model={:?}, model_provider={:?}, workdir={:?}",
+                backend_spec,
+                model.as_deref(),
+                model_provider.as_deref(),
+                task_project_id.as_deref()
+            );
+
+            if backend_spec == "codex" && model_provider.is_some() {
                 let task_grade_result = infer_task_level(
                     user_query,
-                    ra.model.as_deref().unwrap_or(""),
-                    ra.model_provider.as_deref().unwrap_or(""),
+                    model.as_deref().unwrap_or(""),
+                    model_provider.as_deref().unwrap_or(""),
                     query_services,
                 )
                 .await;
@@ -117,24 +247,24 @@ async fn build_plan_request(
                     task_grade_result.confidence,
                 );
                 PlanMode::Backend {
-                    backend_spec: ra.backend.clone(),
+                    backend_spec,
                     backend_kind,
                     env_file: ra.env_file.clone(),
                     env: ra.env.clone(),
                     model: task_grade_result.recommended_model.clone().into(),
                     model_provider: task_grade_result.recommended_model_provider.clone(),
-                    project_id: Some(project_id.to_string()),
+                    project_id: task_project_id,
                     task_level: Some(task_grade_result.task_level.to_string()),
                 }
             } else {
                 PlanMode::Backend {
-                    backend_spec: ra.backend.clone(),
+                    backend_spec,
                     backend_kind,
                     env_file: ra.env_file.clone(),
                     env: ra.env.clone(),
-                    model: ra.model.clone().unwrap_or_default().into(),
-                    model_provider: ra.model_provider.clone(),
-                    project_id: Some(project_id.to_string()),
+                    model,
+                    model_provider,
+                    project_id: task_project_id,
                     task_level: None,
                 }
             }

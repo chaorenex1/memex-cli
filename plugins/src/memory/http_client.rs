@@ -1,6 +1,75 @@
 use memex_core::api as core_api;
 use serde_json::Value;
 
+const BODY_PREVIEW_LIMIT: usize = 512;
+
+fn preview_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return "<empty body>".to_string();
+    }
+
+    let mut out = String::new();
+    let mut truncated = false;
+    for (idx, ch) in trimmed.chars().enumerate() {
+        if idx >= BODY_PREVIEW_LIMIT {
+            truncated = true;
+            break;
+        }
+        out.push(ch);
+    }
+
+    if truncated {
+        out.push_str("...");
+    }
+
+    out
+}
+
+async fn parse_json_response(resp: reqwest::Response) -> anyhow::Result<Value> {
+    let status = resp.status();
+    let body = resp.text().await?;
+
+    if !status.is_success() {
+        let preview = preview_body(&body);
+        return Err(anyhow::anyhow!(
+            "memory service error (status {}): {}",
+            status,
+            preview
+        ));
+    }
+
+    if body.trim().is_empty() {
+        return Ok(Value::Null);
+    }
+
+    serde_json::from_str::<Value>(&body).map_err(|e| {
+        let preview = preview_body(&body);
+        anyhow::anyhow!(
+            "failed to decode response body (status {}): {} | body={}",
+            status,
+            e,
+            preview
+        )
+    })
+}
+
+async fn ensure_success(resp: reqwest::Response) -> anyhow::Result<()> {
+    let status = resp.status();
+    let body = resp.text().await?;
+
+    if !status.is_success() {
+        let preview = preview_body(&body);
+        return Err(anyhow::anyhow!(
+            "memory service error (status {}): {}",
+            status,
+            preview
+        ));
+    }
+
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct HttpClient {
     base_url: String,
@@ -42,7 +111,7 @@ impl HttpClient {
         let req = self.http.post(url).json(&payload);
         let resp = self.auth(req).send().await?;
         let status = resp.status();
-        let v = resp.json::<Value>().await?;
+        let v = parse_json_response(resp).await?;
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.search.out",
@@ -51,7 +120,7 @@ impl HttpClient {
         Ok(v)
     }
 
-    pub async fn send_hit(&self, payload: core_api::QAHitsPayload) -> anyhow::Result<Value> {
+    pub async fn send_hit(&self, payload: core_api::QAHitsPayload) -> anyhow::Result<()> {
         let url = format!("{}/v1/qa/hit", self.base_url.trim_end_matches('/'));
         let used = payload
             .references
@@ -75,15 +144,15 @@ impl HttpClient {
         let req = self.http.post(url).json(&payload);
         let resp = self.auth(req).send().await?;
         let status = resp.status();
-        let v = resp.json::<Value>().await?;
+        ensure_success(resp).await?;
         tracing::debug!(target: "memex.qa", stage = "memory.http.hit.out", status = %status);
-        Ok(v)
+        Ok(())
     }
 
     pub async fn send_candidate(
         &self,
         payload: core_api::QACandidatePayload,
-    ) -> anyhow::Result<Value> {
+    ) -> anyhow::Result<()> {
         let url = format!("{}/v1/qa/candidates", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",
@@ -95,19 +164,19 @@ impl HttpClient {
         let req = self.http.post(url).json(&payload);
         let resp = self.auth(req).send().await?;
         let status = resp.status();
-        let v = resp.json::<Value>().await?;
+        ensure_success(resp).await?;
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.candidate.out",
             status = %status
         );
-        Ok(v)
+        Ok(())
     }
 
     pub async fn send_validate(
         &self,
         payload: core_api::QAValidationPayload,
-    ) -> anyhow::Result<Value> {
+    ) -> anyhow::Result<()> {
         let url: String = format!("{}/v1/qa/validate", self.base_url.trim_end_matches('/'));
         tracing::debug!(
             target: "memex.qa",
@@ -120,13 +189,13 @@ impl HttpClient {
         let req = self.http.post(url).json(&payload);
         let resp = self.auth(req).send().await?;
         let status = resp.status();
-        let v = resp.json::<Value>().await?;
+        ensure_success(resp).await?;
         tracing::debug!(
             target: "memex.qa",
             stage = "memory.http.validate.out",
             status = %status
         );
-        Ok(v)
+        Ok(())
     }
 
     pub async fn task_grade(&self, prompt: String) -> anyhow::Result<Value> {
@@ -142,7 +211,7 @@ impl HttpClient {
             .json(&serde_json::json!({ "prompt": prompt }));
         let resp = self.auth(req).send().await?;
         let status = resp.status();
-        let v = resp.json::<Value>().await?;
+        let v = parse_json_response(resp).await?;
         tracing::debug!(
             target: "memex.task",
             stage = "memory.http.task_grade.out",

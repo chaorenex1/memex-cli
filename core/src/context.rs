@@ -47,6 +47,14 @@ impl AppContext {
         self.events_out.clone()
     }
 
+    pub fn with_config(&self, cfg: AppConfig) -> Self {
+        Self {
+            cfg,
+            events_out: self.events_out.clone(),
+            services_factory: self.services_factory.clone(),
+        }
+    }
+
     pub fn build_services(&self, cfg: &AppConfig) -> Result<Services, RunnerError> {
         let Some(factory) = self.services_factory.as_ref() else {
             return Err(RunnerError::Config(

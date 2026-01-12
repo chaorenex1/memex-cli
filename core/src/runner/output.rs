@@ -460,7 +460,9 @@ impl OutputSink for StdioSink {
                     );
                     Self::write_line(&mut self.stdout, &text).await
                 }
-                LineStream::Stderr => Self::write_line(&mut self.stderr, &text).await,
+                LineStream::Stderr => {
+                    Self::write_line(&mut self.stderr, &Self::audit_preview(&text)).await
+                }
             },
             OutputEvent::ToolEvent(ev) => {
                 let s = serde_json::to_string(ev.as_ref()).unwrap_or_else(|_| "{}".to_string());

@@ -157,6 +157,7 @@ pub async fn run_tui_flow(
                                                         backend_kind: &backend_kind_str,
                                                         stream_format: &input.stream_format,
                                                         abort_rx: Some(abort_rx),
+                                                        stdin_payload: input.stdin_payload.clone(),
                                                     })
                                                     .await
                                                 },
