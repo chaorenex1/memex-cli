@@ -242,6 +242,25 @@ def main():
 
             lang = extract_language_tag(file_path)
             tags.extend([f"lang:{lang}", "file-edit"])
+        
+        elif tool_name == "Read":
+            file_path = tool_input.get('file_path', '')
+            content = tool_response.get('content', '')
+
+            if not should_record_file(file_path):
+                log_debug(f"Skipping Read: {file_path} (filtered)")
+                sys.exit(0)
+
+            if len(content) < 100:
+                log_debug(f"Skipping Read: {file_path} (content too short)")
+                sys.exit(0)
+
+            query = f"读取文件 {file_path}"
+            content_snippet = content[:300] if len(content) > 300 else content
+            answer = f"文件内容片段：\n```\n{content_snippet}\n```"
+
+            lang = extract_language_tag(file_path)
+            tags.extend([f"lang:{lang}", "file-read"])
 
         # 处理 Bash 工具
         elif tool_name == "Bash":
@@ -291,14 +310,14 @@ def main():
             tags.append(f"skill:{skill_name}")
 
         # 处理其他所有工具（通用处理器）
-        else:
-            result = handle_generic_tool(tool_name, tool_input, tool_response)
-            if result:
-                query, answer, tags = result
-                log_debug(f"Generic tool handled: {tool_name}")
-            else:
-                log_debug(f"Skipping: generic handler returned None for {tool_name}")
-                sys.exit(0)
+        # else:
+        #     result = handle_generic_tool(tool_name, tool_input, tool_response)
+        #     if result:
+        #         query, answer, tags = result
+        #         log_debug(f"Generic tool handled: {tool_name}")
+        #     else:
+        #         log_debug(f"Skipping: generic handler returned None for {tool_name}")
+        #         sys.exit(0)
 
         # 记录候选
         if query and answer:
