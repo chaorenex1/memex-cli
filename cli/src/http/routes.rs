@@ -15,6 +15,7 @@ use crate::http::{
     state::AppState,
     validation::{validate_candidate, validate_project_id},
 };
+use tower_http::services::ServeDir;
 
 /// 创建所有路由
 pub fn create_router(state: AppState) -> Router {
@@ -27,6 +28,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/evaluate-session", post(evaluate_session_handler))
         .route("/health", get(health_handler))
         .route("/api/v1/shutdown", post(shutdown_handler))
+        .nest_service("/", ServeDir::new("static"))
         .with_state(state)
 }
 
