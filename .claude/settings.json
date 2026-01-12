@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/memory-hit.py",
+            "command": "python .claude/hooks/record-session-enhanced.py",
             "timeout": 300
           }
         ]
