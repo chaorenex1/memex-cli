@@ -1,37 +1,37 @@
-﻿{
-    "name":  "memex-cli",
-    "version":  "1.0.6",
-    "description":  "CLI shell wrapper with memory, replay, and resume capabilities",
-    "repository":  {
-                       "type":  "git",
-                       "url":  "git+https://github.com/chaorenex1/memex-cli.git"
-                   },
-    "license":  "Apache-2.0",
-    "author":  "chaorenex1",
-    "bin":  {
-                "memex-cli":  "bin.js"
-            },
-    "files":  [
-                  "bin.js",
-                  "scripts/"
-              ],
-    "scripts":  {
-                    "postinstall":  "node -e \"console.log(\u0027\\n💡 Tip: memex-env scripts available in node_modules/memex-cli/scripts/\\n\u0027)\""
-                },
-    "optionalDependencies":  {
-                                 "@memex-cli/darwin-arm64":  "1.0.6",
-                                 "@memex-cli/darwin-x64":  "1.0.6",
-                                 "@memex-cli/linux-x64":  "1.0.6",
-                                 "@memex-cli/win32-x64":  "1.0.6"
-                             },
-    "engines":  {
-                    "node":  "\u003e=14"
-                },
-    "keywords":  [
-                     "cli",
-                     "memex",
-                     "memory",
-                     "replay",
-                     "resume"
-                 ]
+{
+  "name": "memex-cli",
+  "version": "1.0.7",
+  "description": "CLI shell wrapper with memory, replay, and resume capabilities",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaorenex1/memex-cli.git"
+  },
+  "license": "Apache-2.0",
+  "author": "chaorenex1",
+  "bin": {
+    "memex-cli": "bin.js"
+  },
+  "files": [
+    "bin.js",
+    "scripts/"
+  ],
+  "scripts": {
+    "postinstall": "node -e \"console.log('\\n💡 Tip: memex-env scripts available in node_modules/memex-cli/scripts/\\n')\""
+  },
+  "optionalDependencies": {
+    "@memex-cli/darwin-arm64": "1.0.7",
+    "@memex-cli/darwin-x64": "1.0.7",
+    "@memex-cli/linux-x64": "1.0.7",
+    "@memex-cli/win32-x64": "1.0.7"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "keywords": [
+    "cli",
+    "memex",
+    "memory",
+    "replay",
+    "resume"
+  ]
 }
