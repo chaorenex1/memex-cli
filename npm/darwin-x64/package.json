@@ -1,20 +1,20 @@
-﻿{
-    "name":  "@memex-cli/darwin-x64",
-    "version":  "1.0.6",
-    "description":  "memex-cli binary for macOS x64",
-    "repository":  {
-                       "type":  "git",
-                       "url":  "git+https://github.com/chaorenex1/memex-cli.git"
-                   },
-    "license":  "Apache-2.0",
-    "author":  "chaorenex1",
-    "os":  [
-               "darwin"
-           ],
-    "cpu":  [
-                "x64"
-            ],
-    "files":  [
-                  "memex-cli"
-              ]
+{
+  "name": "@memex-cli/darwin-x64",
+  "version": "1.0.7",
+  "description": "memex-cli binary for macOS x64",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chaorenex1/memex-cli.git"
+  },
+  "license": "Apache-2.0",
+  "author": "chaorenex1",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "memex-cli"
+  ]
 }
