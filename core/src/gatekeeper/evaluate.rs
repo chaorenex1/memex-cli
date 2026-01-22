@@ -105,7 +105,7 @@ impl Gatekeeper {
         run: &RunOutcome,
         tool_events: &[ToolEvent],
     ) -> GatekeeperDecision {
-        tracing::debug!(
+        tracing::info!(
             target: "memex.qa",
             stage = "gatekeeper.evaluate.in",
             matches = matches.len(),
@@ -229,10 +229,11 @@ impl Gatekeeper {
                 result: sig.result.clone(),
                 signal_strength: sig.signal_strength.clone(),
                 strong_signal: sig.strong_signal,
-                context: Some(format!(
-                    "exit_code={}, duration_ms={:?}, reason={}",
-                    run.exit_code, run.duration_ms, sig.reason
-                )),
+                context: Some(serde_json::json!({
+                    "exit_code": run.exit_code,
+                    "duration_ms": run.duration_ms,
+                    "reason": sig.reason
+                })),
                 payload: serde_json::json!({
                     "exit_code": run.exit_code,
                     "duration_ms": run.duration_ms,
