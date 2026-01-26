@@ -170,8 +170,11 @@ impl OpenAIEmbeddingService {
 impl EmbeddingService for OpenAIEmbeddingService {
     async fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let request = OpenAIEmbedRequest {
+            prompt: text.to_string(),
             input: text.to_string(),
             model: self.model.clone(),
+            dimensions: self.dimension(),
+            encoding_format: "float".to_string(),
         };
 
         let url = format!("{}/embeddings", self.base_url);
@@ -218,6 +221,8 @@ impl EmbeddingService for OpenAIEmbeddingService {
         let request = OpenAIEmbedBatchRequest {
             input: texts.to_vec(),
             model: self.model.clone(),
+            dimensions: self.dimension(),
+            encoding_format: "float".to_string(),
         };
 
         let response = self
@@ -246,14 +251,19 @@ impl EmbeddingService for OpenAIEmbeddingService {
 
 #[derive(serde::Serialize)]
 struct OpenAIEmbedRequest {
-    input: String,
     model: String,
+    input: String,
+    prompt: String,
+    dimensions: usize,
+    encoding_format: String,
 }
 
 #[derive(serde::Serialize)]
 struct OpenAIEmbedBatchRequest {
     input: Vec<String>,
     model: String,
+    dimensions: usize,
+    encoding_format: String,
 }
 
 #[derive(serde::Deserialize)]
