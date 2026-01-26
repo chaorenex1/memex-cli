@@ -57,7 +57,8 @@ async fn build_hybrid_plugin(
         }
         core_api::EmbeddingProvider::Local => {
             return Err(core_api::CliError::Command(
-                "Local embedding provider is not supported. Please use Ollama or OpenAI.".to_string(),
+                "Local embedding provider is not supported. Please use Ollama or OpenAI."
+                    .to_string(),
             ))
         }
     };

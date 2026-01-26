@@ -493,16 +493,13 @@ impl LanceStore {
 
         // Fetch all items at once using only_if with ID filter
         let table = self.qa_table().await?;
-        let id_filter = ids.iter()
+        let id_filter = ids
+            .iter()
             .map(|id| format!("id == '{}'", Self::escape_lancedb_string(id)))
             .collect::<Vec<_>>()
             .join(" OR ");
 
-        let results = table
-            .query()
-            .only_if(&id_filter)
-            .execute()
-            .await?;
+        let results = table.query().only_if(&id_filter).execute().await?;
 
         let batches = results.try_collect::<Vec<_>>().await?;
 
@@ -532,10 +529,7 @@ impl LanceStore {
                 .map(|item| self.qa_item_to_batch(item))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let reader = arrow_array::RecordBatchIterator::new(
-                batches.into_iter().map(Ok),
-                schema,
-            );
+            let reader = arrow_array::RecordBatchIterator::new(batches.into_iter().map(Ok), schema);
             table.add(reader).execute().await?;
         }
 
