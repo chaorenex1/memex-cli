@@ -17,11 +17,6 @@
 
 ### 一键安装（推荐）
 
-**npm（跨平台）:**
-```bash
-npm install -g memex-cli
-```
-
 **Linux / macOS (Shell):**
 ```bash
 curl -sSL https://github.com/chaorenex1/memex-cli/releases/latest/download/install_memex.sh | bash
@@ -112,7 +107,7 @@ gemini:
 memex-cli run --backend "gemini" --prompt "10道四则运算题,写入文件" --stream-format "text"
 ```
 
-### 🆕 项目初始化 (v1.1.0+)
+### 项目初始化 (v1.1.0+)
 
 快速初始化项目配置：
 
@@ -393,6 +388,22 @@ timeout_ms = 30000
 ```
 
 
+### 远程模式
+
+```toml
+[memory]
+provider = "service"
+enabled = true
+
+# ===== Service Provider (Remote HTTP API) =====
+base_url = "https://memory.internal"
+api_key = ""
+timeout_ms = 10000
+search_limit = 6
+min_score = 0.2
+```
+
+
 ## 架构概览
 
 Memex CLI 采用模块化架构，支持灵活的内存后端：
@@ -442,7 +453,7 @@ Memex CLI 可作为后台服务运行，支持远程调用：
 
 ```bash
 # 启动 HTTP 服务器
-memex-cli http-server --host 0.0.0.0 --port 8080
+memex-cli http-server
 
 # 远程模式调用（自动连接到运行中的服务器）
 memex-cli run --backend codex --prompt "..." --mode remote
@@ -454,7 +465,7 @@ memex-cli run --backend codex --prompt "..." --mode remote
 [http_server]
 mode = "remote"  # 或 "local" 默认本地执行
 host = "127.0.0.1"
-port = 8080
+port = 8001
 ```
 
 
