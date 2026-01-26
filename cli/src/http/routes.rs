@@ -21,7 +21,6 @@ use core_api::{
 };
 use memex_core::api as core_api;
 use tokio::sync::mpsc;
-use tower_http::services::ServeDir;
 use tracing::{debug, error, info};
 
 /// 创建所有路由
@@ -39,7 +38,6 @@ pub fn create_router(state: AppState) -> Router {
         // 系统接口
         .route("/health", get(health_handler))
         .route("/api/v1/shutdown", post(shutdown_handler))
-        .nest_service("/", ServeDir::new("static"))
         .with_state(state)
 }
 
