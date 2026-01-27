@@ -78,13 +78,25 @@ pub async fn request_logger(req: Request<Body>, next: Next) -> Response {
             "Request completed"
         );
     } else if status.is_client_error() || status.is_server_error() {
-        warn!(
-            method = %method,
-            uri = %uri,
-            status = %status.as_u16(),
-            duration_ms = %duration.as_millis(),
-            "Request failed"
-        );
+        // Log additional details for 422 errors (likely JSON deserialization failure)
+        if status.as_u16() == 422 {
+            warn!(
+                method = %method,
+                uri = %uri,
+                status = %status.as_u16(),
+                duration_ms = %duration.as_millis(),
+                error = "JSON deserialization failed - check request body format matches expected schema",
+                "Request failed (422 Unprocessable Entity)"
+            );
+        } else {
+            warn!(
+                method = %method,
+                uri = %uri,
+                status = %status.as_u16(),
+                duration_ms = %duration.as_millis(),
+                "Request failed"
+            );
+        }
     } else {
         info!(
             method = %method,

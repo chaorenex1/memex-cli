@@ -35,7 +35,11 @@ fn audit_preview(s: &str) -> String {
 
 #[derive(Debug, Clone)]
 pub enum OutputEvent {
-    RawLine { stream: LineStream, text: String },
+    RawLine {
+        stream: LineStream,
+        event: String,
+        text: String,
+    },
     ToolEvent(Box<ToolEvent>),
 }
 
@@ -109,8 +113,26 @@ impl JsonlParser {
             if serde_json::to_writer(&mut buf, &ev).is_ok() {
                 // SAFETY: serde_json always produces valid UTF-8
                 let s = unsafe { String::from_utf8_unchecked(buf) };
+                // Debug: log first few events to verify JSON format
+                if tool_events.len() < 3 {
+                    tracing::debug!(
+                        target: "memex.events_out",
+                        event_type = %ev.event_type,
+                        json_len = s.len(),
+                        ends_with_newline = s.ends_with('\n'),
+                        json_preview = %(&s[..s.len().min(200)]),
+                        "sending tool_event to events_out"
+                    );
+                }
                 out.send_line(s).await;
             }
+        } else {
+            // Debug log when events_out is None - helps diagnose missing tool_event writes
+            tracing::debug!(
+                target: "memex.events_out",
+                event_type = %ev.event_type,
+                "events_out is None, tool_event not written to file"
+            );
         }
 
         tool_events.push(ev.clone());
@@ -295,6 +317,18 @@ impl TextParser {
             jsonl: JsonlParser::new(events_out, run_id),
         }
     }
+
+    pub fn take_tool_events(&mut self) -> Vec<ToolEvent> {
+        std::mem::take(&mut self.jsonl.tool_events)
+    }
+
+    pub fn dropped_events_out(&self) -> u64 {
+        self.jsonl.dropped_events_out()
+    }
+
+    pub fn effective_run_id(&self) -> Option<&str> {
+        self.jsonl.effective_run_id()
+    }
 }
 
 #[async_trait]
@@ -317,14 +351,38 @@ impl StreamParser for TextParser {
                     .iter()
                     .map(|e| OutputEvent::RawLine {
                         stream: tap.stream,
+                        event: match e {
+                            OutputEvent::RawLine { event, .. } => event.clone(),
+                            OutputEvent::ToolEvent(te) => te.event_type.clone(),
+                        },
                         text: match e {
                             OutputEvent::RawLine { text, .. } => text.clone(),
-                            OutputEvent::ToolEvent(te) => te
-                                .output
-                                .as_ref()
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string(),
+                            OutputEvent::ToolEvent(te) => {
+                                use crate::tool_event::extract_tool_step_single;
+                                use crate::tool_event::stream_json::EVENT_TYPE_TOOL_REQUEST;
+                                let tool_step = extract_tool_step_single(te, 0, 0);
+
+                                if te.event_type == EVENT_TYPE_TOOL_REQUEST {
+                                    if let Some(tool_step) = tool_step {
+                                        format!("{}\n{}\n{}\n", tool_step.title, tool_step.body, te.output
+                                            .as_ref()
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("\n"))
+                                    } else {
+                                        te.output
+                                        .as_ref()
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("\n")
+                                        .to_string()
+                                    }
+                                } else {
+                                    te.output
+                                        .as_ref()
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("\n")
+                                        .to_string()
+                                }
+                            }
                         },
                     })
                     .collect())
@@ -384,12 +442,13 @@ impl HttpSseSink {
 impl OutputSink for HttpSseSink {
     async fn emit(&mut self, ev: OutputEvent) {
         match ev {
-            OutputEvent::RawLine { stream, text } => {
-                let event = match stream {
-                    LineStream::Stdout => "stdout",
-                    LineStream::Stderr => "stderr",
-                };
-                self.send(event, &text);
+            #[allow(unused_variables)]
+            OutputEvent::RawLine {
+                stream,
+                event,
+                text,
+            } => {
+                self.send(&event, &text);
             }
             OutputEvent::ToolEvent(tool_ev) => {
                 // Stream structured events as JSON payload.
@@ -430,13 +489,18 @@ impl OutputSink for TuiSink {
     async fn emit(&mut self, ev: OutputEvent) {
         if flow_audit_enabled() {
             match &ev {
-                OutputEvent::RawLine { stream, text } => tracing::debug!(
+                OutputEvent::RawLine {
+                    stream,
+                    event,
+                    text,
+                } => tracing::debug!(
                     target: "memex.flow",
                     stage = "sink.tui.in",
                     kind = "raw_line",
                     stream = ?stream,
                     bytes = text.len(),
-                    preview = %audit_preview(text)
+                    preview = %audit_preview(text),
+                    event = %event
                 ),
                 OutputEvent::ToolEvent(tool_ev) => tracing::debug!(
                     target: "memex.flow",
@@ -462,7 +526,12 @@ impl OutputSink for TuiSink {
                     let _ = self.tx.send(RunnerEvent::ToolEvent(tool_ev));
                 }
             }
-            OutputEvent::RawLine { stream, text } => match stream {
+            #[allow(unused_variables)]
+            OutputEvent::RawLine {
+                stream,
+                event,
+                text,
+            } => match stream {
                 LineStream::Stdout => {
                     let _ = self.tx.send(RunnerEvent::RawStdout(text.clone()));
                     let _ = self.tx.send(RunnerEvent::AssistantOutput(text));
@@ -518,13 +587,18 @@ impl OutputSink for StdioSink {
     async fn emit(&mut self, ev: OutputEvent) {
         if flow_audit_enabled() {
             match &ev {
-                OutputEvent::RawLine { stream, text } => tracing::debug!(
+                OutputEvent::RawLine {
+                    stream,
+                    event,
+                    text,
+                } => tracing::debug!(
                     target: "memex.flow",
                     stage = "sink.stdio.in",
                     kind = "raw_line",
                     stream = ?stream,
                     bytes = text.len(),
-                    preview = %audit_preview(text)
+                    preview = %audit_preview(text),
+                    event = %event
                 ),
                 OutputEvent::ToolEvent(tool_ev) => tracing::debug!(
                     target: "memex.flow",
@@ -535,18 +609,24 @@ impl OutputSink for StdioSink {
             }
         }
         match ev {
-            OutputEvent::RawLine { stream, text } => match stream {
+            OutputEvent::RawLine {
+                stream,
+                event,
+                text,
+            } => match stream {
                 LineStream::Stdout => {
                     tracing::debug!(
                         target: "memex.stdout_audit",
                         kind = "raw_line",
                         bytes = text.len(),
-                        preview = %Self::audit_preview(&text)
+                        preview = %Self::audit_preview(&text),
+                        event = %event
                     );
-                    Self::write_line(&mut self.stdout, &text).await
+                    Self::write_line(&mut self.stdout, &event).await;
+                    Self::write_line(&mut self.stdout, &text).await;
                 }
                 LineStream::Stderr => {
-                    Self::write_line(&mut self.stderr, &Self::audit_preview(&text)).await
+                    Self::write_line(&mut self.stderr, &Self::audit_preview(&text)).await;
                 }
             },
             OutputEvent::ToolEvent(ev) => {
