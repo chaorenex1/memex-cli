@@ -36,7 +36,9 @@ impl EventsOutTx {
             match self.tx.try_send(line) {
                 Ok(_) => {}
                 Err(_) => {
-                    let count = self.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let count = self
+                        .dropped
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     // Log every 100 dropped events to avoid log spam
                     if count.is_multiple_of(100) {
                         tracing::warn!(
@@ -137,14 +139,14 @@ pub async fn start_events_out(cfg: &EventsOutConfig) -> Result<Option<EventsOutT
             write_count += 1;
             // Flush periodically to ensure data is written to disk
             // Every 10 writes or for stdout, flush immediately
-            if write_count % 10 == 0 || path == "stdout:" {
-                if writer.flush().await.is_err() {
-                    tracing::error!(
-                        target: "memex.events_out",
-                        "failed to flush events_out file"
-                    );
-                    return;
-                }
+            if (write_count.is_multiple_of(10) || path == "stdout:")
+                && writer.flush().await.is_err()
+            {
+                tracing::error!(
+                    target: "memex.events_out",
+                    "failed to flush events_out file"
+                );
+                return;
             }
         }
 

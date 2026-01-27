@@ -364,16 +364,21 @@ impl StreamParser for TextParser {
 
                                 if te.event_type == EVENT_TYPE_TOOL_REQUEST {
                                     if let Some(tool_step) = tool_step {
-                                        format!("{}\n{}\n{}\n", tool_step.title, tool_step.body, te.output
-                                            .as_ref()
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or("\n"))
+                                        format!(
+                                            "{}\n{}\n{}\n",
+                                            tool_step.title,
+                                            tool_step.body,
+                                            te.output
+                                                .as_ref()
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("\n")
+                                        )
                                     } else {
                                         te.output
-                                        .as_ref()
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("\n")
-                                        .to_string()
+                                            .as_ref()
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("\n")
+                                            .to_string()
                                     }
                                 } else {
                                     te.output
