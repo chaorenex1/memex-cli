@@ -97,7 +97,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install protoc (macOS)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' || matrix.os == 'macos-15-intel'
         run: brew install protobuf
 
       - name: Install protoc (Windows)
