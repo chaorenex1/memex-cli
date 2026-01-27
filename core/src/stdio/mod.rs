@@ -1,4 +1,3 @@
-pub mod files;
 mod id_gen;
 pub mod metrics;
 mod parser;
@@ -10,8 +9,6 @@ pub mod serde_utils;
 mod types;
 
 pub use crate::error::stdio::{ErrorCode, StdioError, StdioParseError};
-#[allow(deprecated)]
-pub use files::{compose_prompt, resolve_files};
 pub use id_gen::generate_task_id;
 pub use parser::parse_stdio_tasks;
 pub use parsers::StandardStdioParser;

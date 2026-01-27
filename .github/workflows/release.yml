@@ -77,13 +77,17 @@ jobs:
             npm-dir: linux-x64
             binary: memex-cli
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-15-intel
             npm-dir: darwin-x64
             binary: memex-cli
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             npm-dir: win32-x64
             binary: memex-cli.exe
+    env:
+      # 关键：统一 macOS deployment target
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -93,7 +97,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install protoc (macOS)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' || matrix.os == 'macos-15-intel'
         run: brew install protobuf
 
       - name: Install protoc (Windows)

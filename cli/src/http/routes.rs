@@ -330,6 +330,15 @@ async fn evaluate_session_handler(
     State(state): State<AppState>,
     Json(req): Json<EvaluateSessionRequest>,
 ) -> Result<Json<EvaluateSessionResponse>, HttpServerError> {
+    // Debug: log incoming request details (helps diagnose 422 errors)
+    tracing::debug!(
+        target: "memex.http",
+        project_id = %req.project_id,
+        session_id = %req.session_id,
+        transcript_path = %req.transcript_path,
+        exit_code = req.exit_code,
+        "evaluate-session request received"
+    );
     // 更新统计
     {
         let mut stats = state.stats.write().unwrap();

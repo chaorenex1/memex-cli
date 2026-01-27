@@ -11,7 +11,7 @@ pub mod stream_json;
 pub mod wrapper_event;
 
 pub use correlate::{correlate_request_result, CorrelationStats, ToolCorrStats};
-pub use linker::{extract_tool_steps, ToolStep};
+pub use linker::{extract_tool_step_single, extract_tool_steps, ToolStep};
 pub use lite::ToolEventLite;
 pub use metrics::build_tool_insights;
 pub use model::{ToolEvent, TOOL_EVENT_PREFIX};

@@ -11,12 +11,12 @@ use serde_json::Value;
 use crate::tool_event::ToolEvent;
 
 // Event type constants (avoid .to_string() allocations)
-const EVENT_TYPE_EVENT_START: &str = "event.start";
-const EVENT_TYPE_EVENT_END: &str = "event.end";
-const EVENT_TYPE_TOOL_REQUEST: &str = "tool.request";
-const EVENT_TYPE_TOOL_RESULT: &str = "tool.result";
-const EVENT_TYPE_ASSISTANT_OUTPUT: &str = "assistant.output";
-const EVENT_TYPE_ASSISTANT_REASONING: &str = "assistant.reasoning";
+pub const EVENT_TYPE_EVENT_START: &str = "event.start";
+pub const EVENT_TYPE_EVENT_END: &str = "event.end";
+pub const EVENT_TYPE_TOOL_REQUEST: &str = "tool.request";
+pub const EVENT_TYPE_TOOL_RESULT: &str = "tool.result";
+pub const EVENT_TYPE_ASSISTANT_OUTPUT: &str = "assistant.output";
+pub const EVENT_TYPE_ASSISTANT_REASONING: &str = "assistant.reasoning";
 
 // Special string markers
 const NO_CONTENT: &str = "(no content)";

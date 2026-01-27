@@ -29,6 +29,7 @@ impl RingBytes {
         g.extend(data);
     }
 
+    #[allow(dead_code)]
     pub fn to_bytes(&self) -> Vec<u8> {
         let g = self.inner.lock().unwrap();
         // Pre-allocate exact capacity to avoid reallocation

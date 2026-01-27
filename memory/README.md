@@ -2,7 +2,7 @@
 
 **Seamless memory and context management for Claude Code through memex-cli integration**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 ## Overview
@@ -29,15 +29,23 @@ Perfect for projects requiring context continuity across sessions, knowledge ret
 - Records complete session transcripts
 - Quality gating to filter sensitive or trivial content
 
-### 🛠️ Manual Memory Tools
-- `/setup-memex` - Interactive configuration wizard
-- `/test-memory` - Test connectivity and functionality
-- `/validate-hooks` - Validate configuration and dependencies
-- `/view-memory-logs` - View and analyze hook execution logs
+### 🛠️ Quick Commands
+| Command | Purpose |
+|---------|---------|
+| `/setup` | Interactive configuration wizard |
+| `/test` | Quick connectivity test |
+| `/health` | Full system diagnostics |
+| `/logs` | View recent hook logs |
+| `/search` | Manual memory search |
+| `/record` | Manually record knowledge |
+| `/reset` | Clean up / reset state |
 
-### 📚 Comprehensive Skills
-- **memory-usage** - Guide for using memory features effectively
-- **hook-troubleshooting** - Debug and resolve hook issues
+### 📚 Skills
+| Skill | Purpose |
+|-------|---------|
+| **memory-workflow** | Complete memory usage guide |
+| **debugging** | Systematic troubleshooting |
+| **optimization** | Performance tuning guide |
 
 ## Quick Start
 
@@ -84,36 +92,32 @@ cp -r memory ~/.claude/plugins/
 Run the interactive setup wizard:
 
 ```
-/setup-memex
+/setup
 ```
 
-This creates `.claude/memory.local.md` with your settings:
-- Memory service URL
-- API key (if required)
+This creates or updates `~/.memex/config.toml` (global) or `./config.toml` (project) with your settings:
+- Memory provider (service/local/hybrid)
+- Service URL and API key
 - Search parameters
-- memex-cli path
+- Additional sections (prompt_inject, gatekeeper, candidate_extract, events_out)
 
-**Alternative**: Manually create `.claude/memory.local.md`:
+**Alternative**: Manually edit `~/.memex/config.toml`:
 
-```markdown
----
-enabled: true
-base_url: "http://localhost:8080"
-api_key: "your-api-key"
-search_limit: 5
-min_score: 0.6
-memex_cli_path: "memex-cli"
----
-
-# Memex Memory Configuration
-
-Project-specific settings.
+```toml
+[memory]
+provider = "service"
+enabled = true
+base_url = "http://localhost:8080"
+api_key = ""
+search_limit = 6
+min_score = 0.2
+timeout_ms = 10000
 ```
 
 ### Verify Installation
 
 ```
-/test-memory
+/test
 ```
 
 This validates:
@@ -150,37 +154,37 @@ This validates:
 ### Manual Memory Operations
 
 **Search memory**:
-```bash
-memex-cli search --query "JWT authentication" --limit 5
+```
+/search
 ```
 
 **Record knowledge**:
-```bash
-memex-cli record-candidate \
-  --query "How to implement rate limiting" \
-  --answer "Use token bucket algorithm with Redis" \
-  --tags "backend,optimization"
+```
+/record
 ```
 
 **View logs**:
 ```
-/view-memory-logs
+/logs
 ```
 
 ### Configuration Options
 
-Edit `.claude/memory.local.md`:
+Edit `~/.memex/config.toml` (global) or `./config.toml` (project):
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `enabled` | Enable/disable hooks | `true` |
-| `base_url` | Memory service URL | `http://localhost:8080` |
-| `api_key` | Authentication key | From global config |
-| `search_limit` | Max search results | `5` |
-| `min_score` | Min relevance (0-1) | `0.6` |
-| `memex_cli_path` | Path to executable | `memex-cli` |
-
-See [SETTINGS_TEMPLATE.md](SETTINGS_TEMPLATE.md) for detailed documentation.
+| Setting | Section | Description | Default |
+|---------|---------|-------------|---------|
+| `provider` | [memory] | Memory backend | `service` |
+| `enabled` | [memory] | Enable/disable memory | `true` |
+| `base_url` | [memory] | Memory service URL | `http://localhost:8080` |
+| `api_key` | [memory] | Authentication key | `""` |
+| `search_limit` | [memory] | Max search results | `6` |
+| `min_score` | [memory] | Min relevance (0-1) | `0.2` |
+| `timeout_ms` | [memory] | Request timeout | `10000` |
+| `max_items` | [prompt_inject] | Max items to inject | `10` |
+| `min_level_inject` | [gatekeeper] | Min validation level | `2` |
+| `max_candidates` | [candidate_extract] | Max candidates to extract | `10` |
+| `enabled` | [events_out] | Log tool events | `true` |
 
 ## Architecture
 
@@ -189,13 +193,17 @@ memory/
 ├── .claude-plugin/
 │   └── plugin.json          # Plugin manifest
 ├── skills/
-│   ├── memory-usage/        # Memory usage guide
-│   └── hook-troubleshooting/ # Debug guide
+│   ├── memory-workflow/     # Memory usage guide
+│   ├── debugging/           # Troubleshooting guide
+│   └── optimization/        # Performance tuning
 ├── commands/
-│   ├── setup-memex.md       # Configuration wizard
-│   ├── test-memory.md       # Connectivity tests
-│   ├── validate-hooks.md    # Configuration validation
-│   └── view-memory-logs.md  # Log viewer
+│   ├── setup.md             # Configuration wizard
+│   ├── test.md              # Connectivity tests
+│   ├── health.md            # Full diagnostics
+│   ├── logs.md              # Log viewer
+│   ├── search.md            # Manual search
+│   ├── record.md            # Manual record
+│   └── reset.md             # Reset / cleanup
 ├── hooks/
 │   └── hooks.json           # Hook event configuration
 └── scripts/
@@ -219,26 +227,23 @@ memory/
 
 ## Troubleshooting
 
-### Hooks Not Triggering
+### Memory Not Working
 
 **Symptom**: No memory injection or recording
 
 **Solutions**:
-1. Check `enabled: true` in `.claude/memory.local.md`
-2. Restart Claude Code (hooks load at session start)
-3. Validate configuration: `/validate-hooks`
-4. Check logs: `/view-memory-logs`
+1. Check `enabled = true` in `[memory]` section of config.toml
+2. Verify config is valid TOML: `python -c "import tomllib; tomllib.load(open('config.toml', 'rb'))"`
+3. Run diagnostics: `/health`
+4. Check logs: `/logs`
 
 ### memex-cli Not Found
 
 **Symptom**: "command not found: memex-cli"
 
 **Solutions**:
-1. Add to PATH: `export PATH="$PATH:/path/to/memex-cli"`
-2. Or specify full path in settings:
-   ```yaml
-   memex_cli_path: "/full/path/to/memex-cli"
-   ```
+1. Build memex-cli: `cargo build --release -p memex-cli`
+2. Add to PATH: `export PATH="$PATH:/path/to/memex_cli/target/release"`
 
 ### Connection Failed
 
@@ -246,69 +251,60 @@ memory/
 
 **Solutions**:
 1. Start memory service
-2. Verify `base_url` in configuration
-3. Test connectivity: `curl http://localhost:8080/health`
+2. Verify `base_url` in `[memory]` section of config.toml
+3. Test connectivity: `curl ${base_url}/health`
 
-### Python Import Errors
+### Config Parse Errors
 
-**Symptom**: "ModuleNotFoundError: No module named 'requests'"
+**Symptom**: "Invalid TOML" errors
 
-**Solution**:
-```bash
-pip install -r scripts/requirements-http.txt
+**Solutions**:
+1. Validate TOML syntax
+2. Check for proper section headers like `[memory]`
+3. Verify string values are quoted
+
+**For comprehensive troubleshooting**, load the debugging skill or run:
 ```
-
-**For comprehensive troubleshooting**, load the skill:
-```
-Ask Claude: "troubleshoot memory hooks"
-```
-
-Or run diagnostics:
-```
-/validate-hooks
-/test-memory
-/view-memory-logs
+/health    # Full diagnostics
+/test      # Quick connectivity check
+/logs      # View recent errors
 ```
 
 ## Configuration Examples
 
 ### Minimal (Default Settings)
 
-```yaml
----
-enabled: true
----
+```toml
+[memory]
+enabled = true
 ```
 
 ### Standard Development
 
-```yaml
----
-enabled: true
-base_url: "http://localhost:8080"
-search_limit: 5
-min_score: 0.6
----
+```toml
+[memory]
+enabled = true
+base_url = "http://localhost:8080"
+search_limit = 6
+min_score = 0.2
 ```
 
 ### Research Mode (Broad Context)
 
-```yaml
----
-enabled: true
-search_limit: 15
-min_score: 0.5
----
+```toml
+[memory]
+enabled = true
+search_limit = 15
+min_score = 0.1
 ```
 
 ### Strict Matching (High Precision)
 
-```yaml
----
-enabled: true
-search_limit: 3
-min_score: 0.8
----
+```toml
+[memory]
+enabled = true
+search_limit = 3
+min_score = 0.5
 ```
 
 ## Best Practices
@@ -317,7 +313,7 @@ min_score: 0.8
 
 1. **Trust automation**: Let hooks capture knowledge automatically
 2. **Tune parameters**: Adjust `search_limit` and `min_score` based on your needs
-3. **Review logs**: Periodically check `/view-memory-logs` for issues
+3. **Review logs**: Periodically check `/logs` for issues
 4. **Curate strategically**: Manually record critical knowledge not captured automatically
 5. **Clean logs**: Archive old logs to manage disk space
 
@@ -330,31 +326,54 @@ min_score: 0.8
 
 ### Security
 
-- Add `.claude/*.local.md` to `.gitignore` (plugin does this automatically)
+- Add `config.toml` to `.gitignore` (contains API keys)
 - Don't commit API keys or sensitive configuration
-- Use project-specific settings for team collaboration
+- Use `redact = true` in `[candidate_extract]` to redact sensitive info
+- Use `strict_secret_block = true` to block secrets completely
 - Review recorded knowledge for sensitive content
 
 ## Integration with memex-cli
 
 This plugin requires [memex-cli](https://github.com/yourusername/memex-cli) and a compatible memory service.
 
-**Global Configuration** (`~/.memex/config.toml`):
+**Configuration Priority** (highest to lowest):
+1. `./config.toml` - Project-specific configuration
+2. `~/.memex/config.toml` - Global user configuration
+3. Built-in defaults
+
+**Complete Configuration Example**:
 ```toml
 [memory]
+provider = "service"
+enabled = true
 base_url = "http://localhost:8080"
-api_key = "your-api-key"
-timeout_ms = 30000
+api_key = ""
+timeout_ms = 10000
+search_limit = 6
+min_score = 0.2
 
-[memory.search]
-limit = 5
-min_score = 0.6
+[prompt_inject]
+placement = "user"
+max_items = 10
+max_answer_chars = 1000
+include_meta_line = true
+
+[gatekeeper]
+provider = "standard"
+max_inject = 10
+min_trust_show = 0.40
+min_level_inject = 2
+
+[candidate_extract]
+max_candidates = 10
+max_answer_chars = 2000
+min_answer_chars = 100
+redact = true
+
+[events_out]
+enabled = true
+path = "./run.events.jsonl"
 ```
-
-**Project Configuration** (`.claude/memory.local.md`):
-- Overrides global settings per project
-- Allows per-project memory service URLs
-- Enables/disables hooks without affecting other projects
 
 ## Contributing
 
@@ -371,8 +390,8 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
 ## Support
 
 - **Documentation**: Load skills with `/` commands
-- **Diagnostics**: Run `/test-memory` and `/validate-hooks`
-- **Logs**: View with `/view-memory-logs`
+- **Diagnostics**: Run `/test` and `/health`
+- **Logs**: View with `/logs`
 - **Issues**: Report on GitHub
 
 ## Credits
@@ -383,6 +402,6 @@ Designed to integrate seamlessly with Claude Code's hook system for transparent,
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2026-01-12
+**Version**: 1.1.0
+**Last Updated**: 2026-01-27
 **Status**: Production Ready
