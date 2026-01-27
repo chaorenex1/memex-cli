@@ -73,7 +73,7 @@ glob = { version = "^0.3" }
 indicatif = { version = "^0.17" }
 
 # Optional LanceDB dependencies (for local-memory feature)
-lancedb = { version = "^0.23", default-features = false}
+lancedb = { version = "^0.23", default-features = false, features = ["polars"] }
 arrow = { version = "^56", default-features = false, features = ["ipc"] }
 arrow-array = { version = "^56"}
 arrow-schema = { version = "^56"}
