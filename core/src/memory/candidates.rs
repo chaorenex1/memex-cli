@@ -1,7 +1,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-use crate::tool_event::{extract_tool_steps, ToolEvent, ToolEventLite, ToolStep};
+use crate::tool_event::{extract_tool_steps, ToolEvent, ToolStep};
 
 // Cached regex patterns for performance (compiled once, reused forever)
 static CMD_REGEX: OnceLock<Regex> = OnceLock::new();
@@ -37,7 +37,7 @@ fn secret_patterns() -> &'static [Regex] {
     })
 }
 
-use super::helpers::{one_line, trim_mid, truncate_clean};
+use super::helpers::{one_line, trim_mid};
 use super::types::{CandidateDraft, CandidateExtractConfig};
 
 pub fn extract_candidates(
@@ -45,9 +45,9 @@ pub fn extract_candidates(
     user_query: &str,
     stdout_tail: &str,
     stderr_tail: &str,
-    tool_events: &[ToolEventLite],
+    tool_events: &[ToolEvent],
 ) -> Vec<CandidateDraft> {
-    tracing::debug!(
+    tracing::info!(
         target: "memex.qa",
         stage = "candidate.extract.start",
         max_candidates = cfg.max_candidates,
@@ -67,15 +67,8 @@ pub fn extract_candidates(
         return vec![];
     }
 
-    let mut combined = String::new();
-    if !stdout_tail.trim().is_empty() {
-        combined.push_str(stdout_tail);
-        combined.push('\n');
-    }
-    if !stderr_tail.trim().is_empty() {
-        combined.push_str(stderr_tail);
-        combined.push('\n');
-    }
+    let combined = crate::gatekeeper::extract_final_answer_from_tool_events(tool_events);
+    let reasoning = crate::gatekeeper::extract_final_reasoning_from_tool_events(tool_events);
 
     if cfg.strict_secret_block && contains_secret(&combined) {
         tracing::debug!(
@@ -86,14 +79,14 @@ pub fn extract_candidates(
         return vec![];
     }
 
-    let cmd_block = extract_command_block(stdout_tail, cfg.context_lines)
-        .or_else(|| extract_command_block(stderr_tail, cfg.context_lines));
+    let cmd_block = extract_command_block(&combined, cfg.context_lines)
+        .or_else(|| extract_command_block(&combined, cfg.context_lines));
 
-    let err_hint = extract_error_hint(stderr_tail).or_else(|| extract_error_hint(stdout_tail));
+    let err_hint = extract_error_hint(&combined).or_else(|| extract_error_hint(&combined));
 
     let tool_summary = summarize_tool_events(tool_events);
 
-    let question = build_question(user_query, err_hint.as_deref(), tool_events);
+    let question = format!("How to: {}", user_query);
 
     let mut answer = String::new();
 
@@ -133,6 +126,18 @@ pub fn extract_candidates(
         answer.push_str("3. Re-run tests/build to confirm.\n");
     }
 
+    if !reasoning.trim().is_empty() {
+        answer.push_str("\n## Reasoning\n");
+        answer.push_str(&reasoning);
+        answer.push('\n');
+    }
+
+    if !combined.trim().is_empty() {
+        answer.push_str("\n## Answer\n");
+        answer.push_str(&combined);
+        answer.push('\n');
+    }
+
     answer.push_str("\n## Notes\n");
     if let Some(h) = &err_hint {
         answer.push_str(&format!(
@@ -163,8 +168,8 @@ pub fn extract_candidates(
         );
         return vec![];
     }
-
-    final_answer = truncate_clean(&final_answer, cfg.max_answer_chars);
+    //暂时不截断答案长度
+    // final_answer = truncate_clean(&final_answer, cfg.max_answer_chars);
 
     let tags = infer_tags(user_query, &final_answer, tool_events);
 
@@ -179,25 +184,33 @@ pub fn extract_candidates(
             "has_error_hint": err_hint.is_some(),
         }),
         summary: None,
-        source: Some("mem-codecli".to_string()),
+        source: Some("memex-cli".to_string()),
     };
 
     let out = vec![draft];
-    tracing::debug!(target: "memex.qa", stage = "candidate.extract.end", produced = out.len());
+    tracing::info!(target: "memex.qa", stage = "candidate.extract.end", produced = out.len());
     out
 }
 
 fn extract_tool_steps_from_lite(
-    events: &[ToolEventLite],
+    events: &[ToolEvent],
     max: usize,
     args_keys_max: usize,
     value_max_chars: usize,
 ) -> Vec<ToolStep> {
+    use crate::tool_event::stream_json::EVENT_TYPE_TOOL_REQUEST;
+    use crate::tool_event::stream_json::EVENT_TYPE_TOOL_RESULT;
     let real_events: Vec<ToolEvent> = events
         .iter()
+        .filter(|e| {
+            matches!(
+                e.event_type.as_str(),
+                EVENT_TYPE_TOOL_REQUEST | EVENT_TYPE_TOOL_RESULT
+            )
+        })
         .map(|lite| ToolEvent {
-            event_type: "tool.request".to_string(),
-            tool: Some(lite.tool.clone()),
+            event_type: lite.event_type.clone(),
+            tool: lite.tool.clone(),
             action: lite.action.clone(),
             args: lite.args.clone(),
             ok: lite.ok,
@@ -264,15 +277,15 @@ fn extract_error_hint(text: &str) -> Option<String> {
     None
 }
 
-fn summarize_tool_events(events: &[ToolEventLite]) -> String {
+fn summarize_tool_events(events: &[ToolEvent]) -> String {
     if events.is_empty() {
         return String::new();
     }
     let mut names: Vec<String> = Vec::new();
     for e in events.iter().rev().take(3) {
-        let mut t = e.tool.clone();
+        let mut t = e.tool.as_deref().unwrap_or("unknown").to_string();
         if let Some(a) = &e.action {
-            t = format!("{}:{}", t, a);
+            t = format!("{} ({})", t, a);
         }
         names.push(t);
     }
@@ -280,31 +293,7 @@ fn summarize_tool_events(events: &[ToolEventLite]) -> String {
     names.join(", ")
 }
 
-fn build_question(
-    user_query: &str,
-    err_hint: Option<&str>,
-    tool_events: &[ToolEventLite],
-) -> String {
-    if let Some(h) = err_hint {
-        return format!(
-            "How to resolve `{}` when running: {}",
-            trim_mid(h, 90),
-            trim_mid(user_query, 120)
-        );
-    }
-
-    if let Some(t) = tool_events.last() {
-        return format!(
-            "How to complete task using tool `{}` for: {}",
-            t.tool,
-            trim_mid(user_query, 140)
-        );
-    }
-
-    format!("How to: {}", trim_mid(user_query, 180))
-}
-
-fn infer_tags(user_query: &str, answer: &str, tool_events: &[ToolEventLite]) -> Vec<String> {
+fn infer_tags(user_query: &str, answer: &str, tool_events: &[ToolEvent]) -> Vec<String> {
     let mut tags = Vec::new();
     let s = format!("{}\n{}", user_query, answer).to_lowercase();
 
@@ -328,7 +317,7 @@ fn infer_tags(user_query: &str, answer: &str, tool_events: &[ToolEventLite]) -> 
     }
 
     for e in tool_events.iter() {
-        let t = e.tool.to_lowercase();
+        let t = e.tool.as_deref().unwrap_or("unknown").to_lowercase();
         if t.contains("git") && !tags.contains(&"git".to_string()) {
             tags.push("git".into());
         }

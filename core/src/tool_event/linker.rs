@@ -20,7 +20,8 @@ pub fn extract_tool_steps(
         if steps.len() >= max_steps {
             break;
         }
-        if e.event_type != "tool.request" {
+        use crate::tool_event::stream_json::EVENT_TYPE_TOOL_REQUEST;
+        if e.event_type != EVENT_TYPE_TOOL_REQUEST {
             continue;
         }
 
@@ -40,40 +41,28 @@ pub fn extract_tool_steps(
     steps
 }
 
-fn summarize_args(args: &Value, args_keys_max: usize, value_max_chars: usize) -> String {
-    // 优先：如果有常见字段（query/path/url/code）就提取；否则列 keys
-    if let Some(o) = args.as_object() {
-        for k in [
-            "query", "q", "path", "filepath", "file", "url", "command", "cmd", "code",
-        ]
-        .iter()
-        {
-            if let Some(v) = o.get(*k) {
-                return format!("{}={}", k, shorten(v, value_max_chars));
-            }
-        }
-        let args_keys_max = args_keys_max.max(1);
-        let keys: Vec<String> = o.keys().take(args_keys_max).cloned().collect();
-        return format!("keys=[{}]", keys.join(","));
+pub fn extract_tool_step_single(
+    event: &ToolEvent,
+    args_keys_max: usize,
+    value_max_chars: usize,
+) -> Option<ToolStep> {
+    use crate::tool_event::stream_json::EVENT_TYPE_TOOL_REQUEST;
+    if event.event_type != EVENT_TYPE_TOOL_REQUEST {
+        return None;
     }
-    "non-object args".to_string()
+
+    let tool = event.tool.clone().unwrap_or_else(|| "unknown".to_string());
+    let action = event.action.clone().unwrap_or_else(|| "call".to_string());
+
+    let args_summary = summarize_args(&event.args, args_keys_max, value_max_chars);
+
+    Some(ToolStep {
+        title: format!("Call tool `{}` ({})", tool, action),
+        body: format!("Args summary: {}", args_summary),
+    })
 }
 
-fn shorten(v: &Value, value_max_chars: usize) -> String {
-    let s = match v {
-        Value::String(x) => x.clone(),
-        _ => v.to_string(),
-    };
-    let t = s.trim().replace('\n', " ");
-
-    let value_max_chars = value_max_chars.max(1);
-    // Use byte length as fast path - valid UTF-8: chars() <= bytes()
-    // Only count chars when byte length suggests truncation needed
-    let is_within_limit = t.len() <= value_max_chars || t.chars().count() <= value_max_chars;
-    if is_within_limit {
-        t
-    } else {
-        let take_chars = value_max_chars.saturating_sub(1).max(1);
-        t.chars().take(take_chars).collect::<String>() + "…"
-    }
+#[allow(unused_variables)]
+fn summarize_args(args: &Value, args_keys_max: usize, value_max_chars: usize) -> String {
+    args.to_string()
 }

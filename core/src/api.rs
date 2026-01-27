@@ -41,16 +41,15 @@ pub use crate::runner::{
 };
 
 pub use crate::stdio::{
-    compose_prompt, configure_event_buffer, emit_json as emit_stdio_json, flush_event_buffer,
-    parse_stdio_tasks, read_stdio_run_opts_json_file, read_stdio_task_json_file,
-    read_stdio_tasks_json_file, render_task_jsonl, render_task_stream, resolve_files,
-    stdio_run_opts_from_json, stdio_run_opts_to_json, stdio_run_opts_to_pretty_json,
-    stdio_task_from_json, stdio_task_to_json, stdio_task_to_pretty_json, stdio_tasks_from_json,
-    stdio_tasks_to_json, write_stdio_run_opts_json_file, write_stdio_task_json_file,
-    write_stdio_tasks_json_file, ErrorCode, FilesEncoding, FilesMode, FormatError,
-    FormatValidation, FormatWarning, JsonlEvent, RenderOutcome, RenderTaskInfo,
-    StandardStdioParser, StdioError, StdioParseError, StdioProtocolParser, StdioRunOpts, StdioTask,
-    TextMarkers,
+    configure_event_buffer, emit_json as emit_stdio_json, flush_event_buffer, parse_stdio_tasks,
+    read_stdio_run_opts_json_file, read_stdio_task_json_file, read_stdio_tasks_json_file,
+    render_task_jsonl, render_task_stream, stdio_run_opts_from_json, stdio_run_opts_to_json,
+    stdio_run_opts_to_pretty_json, stdio_task_from_json, stdio_task_to_json,
+    stdio_task_to_pretty_json, stdio_tasks_from_json, stdio_tasks_to_json,
+    write_stdio_run_opts_json_file, write_stdio_task_json_file, write_stdio_tasks_json_file,
+    ErrorCode, FilesEncoding, FilesMode, FormatError, FormatValidation, FormatWarning, JsonlEvent,
+    RenderOutcome, RenderTaskInfo, StandardStdioParser, StdioError, StdioParseError,
+    StdioProtocolParser, StdioRunOpts, StdioTask, TextMarkers,
 };
 pub use crate::tool_event::{
     CompositeToolEventParser, MultiToolEventLineParser, StreamJsonToolEventParser, ToolEvent,

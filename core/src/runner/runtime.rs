@@ -192,6 +192,7 @@ pub async fn run_session_runtime(
                             if matches!(sink_kind, SinkKind::HttpSse(_)) {
                                 sink_kind
                                     .emit(OutputEvent::RawLine {
+                                        event: "stderr".into(),
                                         stream: tap.stream,
                                         text: tap.line,
                                     })
@@ -349,8 +350,9 @@ pub async fn run_session_runtime(
         .map_err(|e| RunnerError::Spawn(e.to_string()))?;
     let exit_code = outcome.exit_code;
 
-    let stdout_tail = String::from_utf8_lossy(&ring_out.to_bytes()).to_string();
-    let stderr_tail = String::from_utf8_lossy(&ring_err.to_bytes()).to_string();
+    //废弃不从ring buffer获取最终输出
+    let stdout_tail = "".to_string();
+    let stderr_tail = "".to_string();
 
     let tool_events = parser_kind.take_tool_events();
     let dropped = parser_kind.dropped_events_out();
@@ -411,21 +413,21 @@ impl ParserKind {
 
     fn take_tool_events(&mut self) -> Vec<crate::tool_event::ToolEvent> {
         match self {
-            ParserKind::Text(_) => vec![],
+            ParserKind::Text(p) => p.take_tool_events(),
             ParserKind::Jsonl(p) => p.take_tool_events(),
         }
     }
 
     fn dropped_events_out(&self) -> u64 {
         match self {
-            ParserKind::Text(_) => 0,
+            ParserKind::Text(p) => p.dropped_events_out(),
             ParserKind::Jsonl(p) => p.dropped_events_out(),
         }
     }
 
     fn effective_run_id(&self) -> Option<&str> {
         match self {
-            ParserKind::Text(_) => None,
+            ParserKind::Text(p) => p.effective_run_id(),
             ParserKind::Jsonl(p) => p.effective_run_id(),
         }
     }

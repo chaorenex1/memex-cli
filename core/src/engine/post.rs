@@ -7,7 +7,7 @@ use crate::memory::{
     CandidateExtractConfig, MemoryPlugin,
 };
 use crate::runner::{RunOutcome, RunnerResult};
-use crate::tool_event::{ToolEventLite, WrapperEvent};
+use crate::tool_event::WrapperEvent;
 
 pub(crate) struct PostRunContext<'a> {
     pub project_id: &'a str,
@@ -67,7 +67,7 @@ pub async fn post_run(
         stderr_tail: run.stderr_tail.clone(),
         tool_events: run.tool_events.clone(),
         shown_qa_ids,
-        used_qa_ids: crate::gatekeeper::extract_qa_refs(&run.stdout_tail),
+        used_qa_ids: crate::gatekeeper::extract_qa_refs_from_tool_events(&run.tool_events),
     };
 
     tracing::info!(
@@ -100,9 +100,6 @@ pub async fn post_run(
             validate_plans = decision.validate_plans.len()
         );
 
-        let tool_events_lite: Vec<ToolEventLite> =
-            run.tool_events.iter().map(|e| e.into()).collect();
-
         let candidate_drafts: Vec<CandidateDraft> = if decision.should_write_candidate {
             tracing::debug!(target: "memex.qa", stage = "candidate.extract.in");
             crate::memory::extract_candidates(
@@ -110,7 +107,7 @@ pub async fn post_run(
                 user_query,
                 &run_outcome.stdout_tail,
                 &run_outcome.stderr_tail,
-                &tool_events_lite,
+                &run.tool_events,
             )
         } else {
             vec![]
