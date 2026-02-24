@@ -63,6 +63,7 @@ windows = { version = "0.58", features = ["Win32_System_Threading"] }
 # Time & UUID (minimal features)
 chrono = { version = "^0.4", features = ["clock", "std"] }
 uuid = { version = "^1.8", features = ["std"] }
+memchr={version = "2.7"}
 # Text & regex
 regex = { version = "^1.10", features = ["std", "unicode"] }
 encoding_rs = { version = "^0.8" }

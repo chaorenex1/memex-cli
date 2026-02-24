@@ -1097,7 +1097,7 @@ fn default_max_parallel_tasks() -> usize {
 }
 
 fn default_enable_adaptive_concurrency() -> bool {
-    true
+    false
 }
 
 fn default_enable_event_buffering() -> bool {

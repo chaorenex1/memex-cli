@@ -27,7 +27,10 @@ tracing = { workspace = true }
 
 # Time & UUID
 chrono = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+
+# Performance optimized search
+memchr = {workspace = true}
 
 # Text & regex
 regex = { workspace = true }
