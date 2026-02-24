@@ -48,7 +48,7 @@ Memex-CLI is a Rust-based CLI shell wrapper with memory, replay, and resume capa
 memex-cli/
 ├── core/              # Core execution engine and domain logic (memex-core)
 ├── plugins/           # Backend, memory, policy, gatekeeper implementations (memex-plugins)
-├── cli/               # Binary entry point and TUI (memex-cli)
+├── cli/               # Binary entry point (memex-cli)
 ├── config.toml        # Default configuration
 ├── .env.online        # Online environment variables
 └── .env.offline       # Offline environment variables
@@ -79,7 +79,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 ## Key Entry Points
 
 - `cli/src/main.rs` - Binary entry point, argument parsing, command dispatch
-- `cli/src/app.rs` - Application orchestration, config merging, TUI/standard flow selection
+- `cli/src/app.rs` - Application orchestration, config merging, standard flow execution
 - `cli/src/commands/cli.rs` - CLI argument definitions (RunArgs, ReplayArgs, ResumeArgs, SearchArgs, RecordCandidateArgs, RecordHitArgs, RecordSessionArgs)
 - `cli/src/commands/memory.rs` - Memory service CLI command handlers (search, record-candidate, record-hit, record-session)
 - `core/src/api.rs` - Public API re-exports
@@ -104,13 +104,21 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ### Execution Flow
 ```
-main.rs -> app.rs -> flow_standard.rs or flow_tui.rs
+main.rs -> app.rs -> flow_standard.rs
   -> plugins/plan.rs (build_runner_spec)
-  -> core/engine/run.rs (run_with_query)
-    -> pre.rs (memory search + inject)
-    -> run.rs (backend execution)
-    -> post.rs (gatekeeper + extract)
+  -> core/engine/run.rs
+    -> run_with_query (full flow with memory)
+      -> pre.rs (memory search + inject)
+      -> run.rs (backend execution)
+      -> post.rs (gatekeeper + extract)
+    -> run_with_query_no_qa (when memory.enabled=false)
+      -> run.rs (backend execution only, skip pre/post)
 ```
+
+### Memory-Aware Execution
+The execution engine selects between two paths based on `cfg.memory.enabled`:
+- **`run_with_query`**: Full flow with memory search, injection, and gatekeeper evaluation
+- **`run_with_query_no_qa`**: Simplified flow that skips pre_run and post_run for better performance
 
 ## Architecture Documentation
 
@@ -158,7 +166,7 @@ Config loading priority (highest to lowest):
 2. `./config.toml` (current directory)
 3. Built-in defaults
 
-Key config sections: `control`, `logging`, `policy`, `memory`, `prompt_inject`, `gatekeeper`, `candidate_extract`, `events_out`, `tui`
+Key config sections: `control`, `logging`, `policy`, `memory`, `prompt_inject`, `gatekeeper`, `candidate_extract`, `events_out`, `stdio`
 
 ## Coding Conventions
 
@@ -171,7 +179,7 @@ Key config sections: `control`, `logging`, `policy`, `memory`, `prompt_inject`, 
 
 ## Dependencies
 
-Key crates: tokio, clap (derive), serde/serde_json, tracing, reqwest, ratatui/crossterm, thiserror, chrono, uuid, toml
+Key crates: tokio, clap (derive), serde/serde_json, tracing, reqwest, thiserror, chrono, uuid, toml
 
 ## CI/CD
 
@@ -195,3 +203,35 @@ Key crates: tokio, clap (derive), serde/serde_json, tracing, reqwest, ratatui/cr
 1. Update types in `core/src/config/types.rs`
 2. Update `config.toml` example
 3. Update loading logic in `core/src/config/load.rs` if needed
+
+## STDIO Protocol
+
+The CLI supports structured task input via stdin using a custom protocol.
+
+### Task Format
+```
+---TASK---
+id: <task_id>
+backend: <backend>           # Optional (codex, claude, gemini, or URL)
+workdir: <working_directory>
+model: <model_name>          # Optional
+system_prompt: <prompt>      # Optional (alias: system-prompt)
+---CONTENT---
+<user prompt content>
+---END---
+```
+
+### Key Fields
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Unique task identifier |
+| `backend` | No | Backend to use (defaults to config or empty) |
+| `workdir` | Yes | Working directory for execution |
+| `model` | No | Model override |
+| `system_prompt` | No | System instructions prepended to prompt |
+| `timeout` | No | Timeout in seconds |
+| `dependencies` | No | Comma-separated task IDs for DAG execution |
+
+### CLI Arguments
+- `--backend` is optional; if not provided, uses task's backend field or config default
+- `--stdin` reads tasks from stdin in structured format
