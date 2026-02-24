@@ -47,5 +47,6 @@ pub struct TaskMetadata {
     pub files: Vec<String>,
     pub files_mode: Option<String>,
     pub files_encoding: Option<String>,
+    pub system_prompt: Option<String>,
     pub tags: Vec<String>,
 }

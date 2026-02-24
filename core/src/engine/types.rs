@@ -27,6 +27,7 @@ pub enum RunnerSpec {
         resume_id: Option<String>,
         model: Option<String>,
         model_provider: Option<String>,
+        system_prompt: Option<String>,
         project_id: Option<String>,
         stream_format: String,
         task_level: Option<String>,

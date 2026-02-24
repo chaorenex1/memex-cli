@@ -31,6 +31,8 @@ pub struct StdioTask {
     pub files_mode: FilesMode,
     pub files_encoding: FilesEncoding,
     pub content: String,
+    #[serde(alias = "system-prompt")]
+    pub system_prompt: Option<String>,
     pub backend_kind: Option<crate::config::BackendKind>,
     pub env_file: Option<String>,
     pub env: Option<Vec<String>>,
@@ -71,6 +73,7 @@ impl StdioTask {
                 }
                 .to_string(),
             ),
+            system_prompt: self.system_prompt.clone(),
             tags: Vec::new(),
         };
 

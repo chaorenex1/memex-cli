@@ -22,16 +22,19 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             prompt: raw_prompt,
             model,
             model_provider,
+            system_prompt,
             project_id,
             stream_format,
             task_level: _,
         } = request;
 
+        let prompt = merge_system_prompt(system_prompt.as_deref(), &raw_prompt);
+
         // 提取命令类型用于判断参数格式（codex/claude/gemini）
         let cmd_type = extract_command_type(&backend);
 
         // 使用新的编码策略检测
-        let encoding_strategy = detect_encoding_strategy(&raw_prompt);
+        let encoding_strategy = detect_encoding_strategy(&prompt);
         let use_stdin_prompt = match encoding_strategy {
             EncodingStrategy::DirectArgs => false,
             EncodingStrategy::ForceStdin { .. } => {
@@ -43,7 +46,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         };
 
         let stdin_payload = if use_stdin_prompt {
-            Some(prepare_stdin_payload(&raw_prompt))
+            Some(prepare_stdin_payload(&prompt))
         } else {
             None
         };
@@ -51,7 +54,7 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
         tracing::info!(
             "Encoding strategy: {:?}, prompt_len: {}, use_stdin: {}",
             encoding_strategy,
-            raw_prompt.len(),
+            prompt.len(),
             use_stdin_prompt
         );
 
@@ -111,8 +114,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 }
             }
 
-            if !raw_prompt.is_empty() && !use_stdin_prompt {
-                args.push(escape_shell_arg(&raw_prompt));
+            if !prompt.is_empty() && !use_stdin_prompt {
+                args.push(escape_shell_arg(&prompt));
             }
         } else if cmd_type.contains("claude") {
             // Matches examples like:
@@ -148,8 +151,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                     args.push(resume_id.to_string());
                 }
             }
-            if !raw_prompt.is_empty() && !use_stdin_prompt {
-                args.push(escape_shell_arg(&raw_prompt));
+            if !prompt.is_empty() && !use_stdin_prompt {
+                args.push(escape_shell_arg(&prompt));
             }
             // if let Some(dir) = &project_id {
             //     args.push("--add-dir".to_string());
@@ -162,8 +165,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             if use_stdin_prompt {
                 args.push("-p".to_string());
                 args.push(String::new());
-            } else if !raw_prompt.is_empty() {
-                args.push(escape_shell_arg(&raw_prompt));
+            } else if !prompt.is_empty() {
+                args.push(escape_shell_arg(&prompt));
             }
 
             args.push("-y".to_string());
@@ -197,8 +200,8 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
                 args.push("--model".to_string());
                 args.push(m);
             }
-            if !raw_prompt.is_empty() {
-                args.push(escape_shell_arg(&raw_prompt));
+            if !prompt.is_empty() {
+                args.push(escape_shell_arg(&prompt));
             }
         }
 
@@ -213,6 +216,18 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             },
         })
     }
+}
+
+fn merge_system_prompt(system_prompt: Option<&str>, user_prompt: &str) -> String {
+    let Some(system_prompt) = system_prompt.map(str::trim).filter(|s| !s.is_empty()) else {
+        return user_prompt.to_string();
+    };
+
+    if user_prompt.trim().is_empty() {
+        return format!("System instructions:\n{system_prompt}");
+    }
+
+    format!("System instructions:\n{system_prompt}\n\nUser prompt:\n{user_prompt}")
 }
 
 /// 解析可执行文件的完整路径

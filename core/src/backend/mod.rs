@@ -18,6 +18,7 @@ pub struct BackendPlanRequest {
     pub prompt: String,
     pub model: Option<String>,
     pub model_provider: Option<String>,
+    pub system_prompt: Option<String>,
     pub project_id: Option<String>,
     pub stream_format: String,
     pub task_level: Option<String>,
