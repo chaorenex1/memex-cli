@@ -11,7 +11,7 @@ pub use crate::config::{
 };
 pub use crate::context::{AppContext, Services, ServicesFactory};
 pub use crate::engine::{
-    post_run, pre_run, run_with_query, PreRun, RunSessionInput, RunWithQueryArgs, RunnerSpec,
+    post_run, pre_run, run_with_query,run_with_query_no_qa, PreRun, RunSessionInput, RunWithQueryArgs, RunnerSpec,
 };
 pub use crate::error::{CliError, ExecutorError, RunnerError};
 pub use crate::events_out::EventsOutTx;

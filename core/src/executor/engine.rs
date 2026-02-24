@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::context::AppContext;
-use crate::engine::run_with_query;
+use crate::engine::{run_with_query, run_with_query_no_qa};
 use crate::error::ExecutorError;
 use crate::runner::{run_session, RunSessionArgs, RunnerResult};
 use crate::stdio::StdioTask;
@@ -927,7 +927,8 @@ where
     let (abort_tx, abort_rx) = tokio::sync::mpsc::channel::<String>(1);
     let http_sse_tx = exec_opts.http_sse_tx.clone();
 
-    let run_fut = run_with_query(run_args, move |input| {
+    let memory_enabled = ctx.cfg().memory.enabled;
+    let run_session_fn = move |input: crate::engine::RunSessionInput| {
         let result_holder = result_holder_clone.clone();
         let http_sse_tx = http_sse_tx.clone();
         async move {
@@ -959,7 +960,14 @@ where
 
             Ok(result)
         }
-    });
+    };
+    let run_fut = async move {
+        if memory_enabled {
+            run_with_query(run_args, run_session_fn).await
+        } else {
+            run_with_query_no_qa(run_args, run_session_fn).await
+        }
+    };
 
     tokio::pin!(run_fut);
     let timed = tokio::time::timeout(Duration::from_secs(timeout_secs), &mut run_fut).await;
