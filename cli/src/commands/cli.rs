@@ -34,17 +34,6 @@ impl From<memex_core::api::BackendKind> for BackendKind {
     }
 }
 
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskLevel {
-    #[default]
-    Auto,
-    L0,
-    L1,
-    L2,
-    L3,
-}
-
 #[derive(Parser, Debug, Clone)]
 #[command(version)]
 pub struct Args {
@@ -63,7 +52,8 @@ pub struct Args {
 #[derive(ClapArgs, Debug, Clone, Serialize, Deserialize)]
 pub struct RunArgs {
     #[arg(long)]
-    pub backend: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 
     /// Explicitly select how to interpret `--backend`.
     /// - auto: URL => aiservice, otherwise => codecli
@@ -81,13 +71,6 @@ pub struct RunArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
 
-    /// Task level for scheduling/strategy hints.
-    /// - auto: infer from prompt (fast heuristic)
-    /// - L0..L3: explicitly set
-    #[arg(long, value_enum, default_value_t = TaskLevel::Auto)]
-    #[serde(default)]
-    pub task_level: TaskLevel,
-
     #[arg(long, group = "input")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
@@ -103,11 +86,6 @@ pub struct RunArgs {
     #[arg(long, default_value = "text")]
     #[serde(default = "default_stream_format")]
     pub stream_format: String,
-
-    /// Force TUI mode (does not affect `--stream-format`).
-    #[arg(long, default_value_t = false)]
-    #[serde(default)]
-    pub tui: bool,
 
     /// Extra environment variables to pass to the backend process (KEY=VALUE).
     /// Can be specified multiple times.
@@ -441,33 +419,6 @@ pub struct DbArgs {
     pub command: DbCommand,
 }
 
-#[derive(ClapArgs, Debug, Clone)]
-pub struct InitArgs {
-    /// Memory provider type: local, hybrid, or service
-    #[arg(long, default_value = "local")]
-    pub provider: String,
-
-    /// Skip interactive prompts, use defaults
-    #[arg(long, default_value_t = false)]
-    pub non_interactive: bool,
-
-    /// Ollama base URL (for local embeddings)
-    #[arg(long, default_value = "http://localhost:11434")]
-    pub ollama_url: String,
-
-    /// OpenAI API key (for OpenAI embeddings)
-    #[arg(long)]
-    pub openai_key: Option<String>,
-
-    /// Remote memory service URL (for hybrid mode)
-    #[arg(long)]
-    pub remote_url: Option<String>,
-
-    /// Remote memory API key (for hybrid mode)
-    #[arg(long)]
-    pub remote_key: Option<String>,
-}
-
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
@@ -479,8 +430,6 @@ pub enum Commands {
     RecordValidation(RecordValidationArgs),
     RecordSession(RecordSessionArgs),
     HttpServer(HttpServerArgs),
-    /// Initialize memex configuration
-    Init(InitArgs),
     /// Memory synchronization commands
     Sync(SyncArgs),
     /// Local database management

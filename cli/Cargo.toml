@@ -37,9 +37,6 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }
 shellexpand = { workspace = true}
 
-# Optional TUI dependencies
-ratatui = { workspace = true}
-crossterm = { workspace = true}
 atty = { workspace = true}
 
 # HTTP client (for daemon)

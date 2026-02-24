@@ -5,5 +5,4 @@ pub mod commands;
 pub mod flow;
 pub mod http;
 pub mod stdio;
-pub mod tui;
 pub mod utils;
