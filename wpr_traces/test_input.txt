@@ -1,0 +1,15 @@
+---TASK---
+id: task1-fib
+backend: codex
+workdir: C:\Users\zarag\Documents\aduib-app\memex_cli
+---CONTENT---
+Calculate fibonacci(10) step by step
+---END---
+
+---TASK---
+id: task2-dfs
+backend: codex
+workdir: C:\Users\zarag\Documents\aduib-app\memex_cli
+---CONTENT---
+Explain DFS algorithm with pseudocode
+---END---
