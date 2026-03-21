@@ -1,4 +1,4 @@
-//! 标准（非 TUI）执行流：解析用户输入、调用 planner 生成 `RunnerSpec`，通过 core 引擎执行一次会话。
+//! 标准执行流：解析用户输入、调用 planner 生成 `RunnerSpec`，通过 core 引擎执行一次会话。
 use crate::commands::cli::{Args, RunArgs};
 use crate::http::client::RemoteClient;
 use crate::stdio::{execute_stdio_tasks, read_stdin_text};
@@ -55,7 +55,9 @@ pub async fn run_standard_flow(
         tasks.push(core_api::StdioTask {
             id: run_id.clone(),
             content: raw_input.clone(),
-            backend: run_args.map(|ra| ra.backend.clone()).unwrap_or_default(),
+            backend: run_args
+                .and_then(|ra| ra.backend.clone())
+                .unwrap_or_default(),
             model: run_args.and_then(|ra| ra.model.clone()),
             model_provider: run_args.and_then(|ra| ra.model_provider.clone()),
             workdir: project_id.clone(),
@@ -66,6 +68,7 @@ pub async fn run_standard_flow(
             files: vec![],
             files_encoding: core_api::FilesEncoding::Utf8,
             files_mode: core_api::FilesMode::Ref,
+            system_prompt: None,
             backend_kind,
             env_file,
             env,

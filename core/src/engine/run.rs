@@ -183,6 +183,116 @@ where
     Ok(run_outcome.exit_code)
 }
 
+pub async fn run_with_query_no_qa<F, Fut>(
+    args: RunWithQueryArgs,
+    run_session_fn: F,
+) -> Result<i32, RunnerError>
+where
+    F: FnOnce(RunSessionInput) -> Fut,
+    Fut: Future<Output = Result<RunnerResult, RunnerError>>,
+{
+    let RunWithQueryArgs {
+        user_query,
+        cfg,
+        runner,
+        run_id,
+        capture_bytes,
+        stream_format,
+        project_id: _,
+        events_out_tx,
+        services,
+        wrapper_start_data,
+    } = args;
+
+    tracing::info!("run_with_query: run_id={}", run_id);
+    let policy = services.policy.clone();
+
+    // Buffer wrapper events until we have the effective run_id.
+    let mut pending_wrapper_events: Vec<WrapperEvent> = Vec::new();
+    let mut start_event = WrapperEvent::new("run.start", Local::now().to_rfc3339());
+    start_event.data = wrapper_start_data;
+    pending_wrapper_events.push(start_event);
+
+    // Build runner + session args directly from user query (skip pre_run).
+    let (runner, session_args) = build_runner_and_args(runner, user_query)?;
+    tracing::info!("Starting runner '{}' for run_id={}", runner.name(), run_id);
+
+    if let Some(last) = pending_wrapper_events.last_mut() {
+        match last.data.as_mut() {
+            Some(serde_json::Value::Object(map)) => {
+                map.entry("cmd".to_string())
+                    .or_insert_with(|| serde_json::Value::String(session_args.cmd.clone()));
+                map.entry("args".to_string())
+                    .or_insert_with(|| serde_json::json!(session_args.args.clone()));
+            }
+            None => {
+                last.data = Some(serde_json::json!({
+                    "cmd": session_args.cmd.clone(),
+                    "args": session_args.args.clone(),
+                }));
+            }
+            Some(_) => {
+                last.data = Some(serde_json::json!({
+                    "cmd": session_args.cmd.clone(),
+                    "args": session_args.args.clone(),
+                }));
+            }
+        }
+    }
+
+    let stdin_payload = session_args.stdin_payload.clone();
+    let session = match runner.start_session(&session_args).await {
+        Ok(session) => session,
+        Err(e) => {
+            tracing::error!(
+                "runner '{}' failed to start session for run_id={}: {}",
+                runner.name(),
+                run_id,
+                e
+            );
+            for mut ev in pending_wrapper_events {
+                ev.run_id = Some(run_id.clone());
+                write_wrapper_event(events_out_tx.as_ref(), &ev).await;
+            }
+            return Err(RunnerError::Spawn(e.to_string()));
+        }
+    };
+
+    let run_input = RunSessionInput {
+        session,
+        run_id: run_id.clone(),
+        control: cfg.control.clone(),
+        policy,
+        capture_bytes,
+        events_out_tx: events_out_tx.clone(),
+        backend_kind: cfg.backend_kind,
+        stream_format: stream_format.clone(),
+        stdin_payload,
+    };
+
+    // Run Session (runner runtime is in core; caller may provide a custom session loop, e.g. TUI).
+    let run_result = match run_session_fn(run_input).await {
+        Ok(r) => r,
+        Err(e) => {
+            // Best-effort: still emit buffered wrapper events so the run has a trace,
+            // using the configured run_id (no session_id discovered).
+            for mut ev in pending_wrapper_events {
+                ev.run_id = Some(run_id.clone());
+                write_wrapper_event(events_out_tx.as_ref(), &ev).await;
+            }
+            return Err(e);
+        }
+    };
+    let effective_run_id = run_result.run_id.clone();
+    for mut ev in pending_wrapper_events {
+        ev.run_id = Some(effective_run_id.clone());
+        write_wrapper_event(events_out_tx.as_ref(), &ev).await;
+    }
+
+    // no_qa variant skips post_run and always reports success for wrapper exit code.
+    Ok(run_result.exit_code)
+}
+
 fn build_runner_and_args(
     runner: RunnerSpec,
     merged_query: String,
@@ -195,6 +305,7 @@ fn build_runner_and_args(
             resume_id,
             model,
             model_provider,
+            system_prompt,
             project_id,
             stream_format,
             task_level,
@@ -206,6 +317,7 @@ fn build_runner_and_args(
                 prompt: merged_query,
                 model,
                 model_provider,
+                system_prompt,
                 project_id,
                 stream_format,
                 task_level,

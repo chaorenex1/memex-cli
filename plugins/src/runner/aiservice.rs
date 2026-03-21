@@ -32,6 +32,7 @@ impl RunnerPlugin for AiServiceRunnerPlugin {
         let url = args.cmd.clone();
         let prompt = args.args.first().cloned().unwrap_or_default();
         let model = args.envs.get("MEMEX_MODEL").cloned();
+        let system_prompt = args.envs.get("MEMEX_SYSTEM_PROMPT").cloned();
         let stream = args
             .envs
             .get("MEMEX_STREAM")
@@ -43,11 +44,14 @@ impl RunnerPlugin for AiServiceRunnerPlugin {
 
         let handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             let client = reqwest::Client::new();
-            let payload = serde_json::json!({
+            let mut payload = serde_json::json!({
                 "prompt": prompt,
                 "model": model,
                 "stream": stream,
             });
+            if let Some(sp) = system_prompt {
+                payload["system_prompt"] = serde_json::Value::String(sp);
+            }
 
             let resp = client.post(&url).json(&payload).send().await;
             let resp = match resp {
@@ -93,8 +97,7 @@ impl RunnerPlugin for AiServiceRunnerPlugin {
                 return Ok(());
             }
 
-            let body = resp.bytes().await;
-            let body = match body {
+            let body = match resp.bytes().await {
                 Ok(b) => b,
                 Err(e) => {
                     let _ = stderr_wr

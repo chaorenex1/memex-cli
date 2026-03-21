@@ -7,10 +7,8 @@
 
 - 把一次运行完整记录为 `run.events.jsonl`（审计、复盘、调试友好）
 - 支持 `replay` 重放、`resume` 续跑（基于 `run_id`）
-- **本地向量存储**：基于 LanceDB 的本地知识库，支持 Ollama/OpenAI 嵌入
+- **远程内存服务**：基于 HTTP API 的知识库，支持向量搜索和质量评估
 - **内存管理命令**：`search`、`record-candidate`、`record-hit`、`record-session`
-- **数据库管理**：`db init`、`db info`、`db export`、`db import`
-- **同步功能**：支持本地与远程内存同步（`sync status`、`sync now`）
 - 通过 `config.toml` + 环境变量统一管理配置
 
 ## 安装
@@ -106,19 +104,6 @@ gemini:
 ```bash
 memex-cli run --backend "gemini" --prompt "10道四则运算题,写入文件" --stream-format "text"
 ```
-
-### 项目初始化 (v1.1.0+)
-
-快速初始化项目配置：
-
-```bash
-memex-cli init
-```
-
-交互式创建 `config.toml` 配置文件，支持：
-- 选择内存提供商（本地/远程/混合）
-- 配置嵌入服务（Ollama/OpenAI）
-- 设置同步选项
 
 ### 🆕 结构化文本输入 (v1.0.5+)
 
@@ -300,95 +285,9 @@ memex-cli record-session \
 - `--project-id`: 项目标识（可选）
 - `--extract-only`: 仅提取不写入记忆服务（可选，默认 false）
 
-### 5) 本地数据库管理
+### 配置内存服务
 
-Memex CLI 支持基于 LanceDB 的本地向量存储，无需远程服务即可实现知识检索。
-
-#### 初始化本地数据库
-
-```bash
-memex-cli db init
-```
-
-#### 查看数据库信息
-
-```bash
-memex-cli db info --format markdown
-```
-
-#### 导出/导入数据
-
-```bash
-# 导出为 JSONL
-memex-cli db export --output qa_backup.jsonl
-
-# 导出为 CSV
-memex-cli db export --output qa_backup.csv --format csv
-
-# 从文件导入
-memex-cli db import --input qa_backup.jsonl
-```
-
-### 6) 同步功能
-
-支持本地数据库与远程服务之间的数据同步。
-
-```bash
-# 查看同步状态
-memex-cli sync status
-
-# 立即执行同步
-memex-cli sync now
-
-# 查看冲突
-memex-cli sync conflicts
-```
-
-### 配置本地内存
-
-在 `config.toml` 中配置本地内存：
-
-```toml
-[memory]
-enabled = true
-provider = "local"  # 或 "hybrid" 混合模式
-
-[memory.local]
-db_path = "~/.memex/data"
-search_limit = 6
-min_score = 0.2
-
-[memory.local.embedding]
-provider = "ollama"  # 或 "openai"
-
-[memory.local.embedding.ollama]
-base_url = "http://localhost:11434"
-model = "nomic-embed-text"
-dimension = 768
-
-[memory.local.sync]
-enabled = true
-interval_secs = 300
-batch_size = 100
-```
-
-### 混合模式（本地 + 远程）
-
-```toml
-[memory]
-provider = "hybrid"
-
-[memory.hybrid]
-sync_strategy = "local-first"  # 或 "remote-first"
-
-[memory.hybrid.remote]
-base_url = "https://your-memory-service.com"
-api_key = "your-api-key"
-timeout_ms = 30000
-```
-
-
-### 远程模式
+在 `config.toml` 中配置远程 HTTP 内存服务：
 
 ```toml
 [memory]
@@ -403,17 +302,23 @@ search_limit = 6
 min_score = 0.2
 ```
 
+环境变量覆盖：
+```bash
+export MEM_CODECLI_MEMORY_URL="https://memory.internal"
+export MEM_CODECLI_MEMORY_API_KEY="your-api-key"
+```
+
 
 ## 架构概览
 
-Memex CLI 采用模块化架构，支持灵活的内存后端：
+Memex CLI 采用模块化架构，专注于远程 HTTP 内存服务：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         CLI Layer                           │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
-│  │   run    │ │  replay  │ │  resume  │ │  init / db   │  │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐                    │
+│  │   run    │ │  replay  │ │  resume  │                     │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘                     │
 │       └────────────┴────────────┴───────────────┘         │
 └────────────────────────────────┬────────────────────────────┘
                                  │
@@ -428,24 +333,20 @@ Memex CLI 采用模块化架构，支持灵活的内存后端：
                                  │
 ┌────────────────────────────────▼────────────────────────────┐
 │                    Memory Layer                              │
-│  ┌────────────┐  ┌────────────┐  ┌──────────────────────┐  │
-│  │   Local    │  │   Hybrid   │  │      Remote         │  │
-│  │  (LanceDB) │  │ (Local+Rmt)│  │  (HTTP Service)     │  │
-│  └────────────┘  └────────────┘  └──────────────────────┘  │
-│                                                              │
-│  Embedding:  Ollama  │  OpenAI  │  (Local CPU/GPU removed)  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │              Remote HTTP Service                     │  │
+│  │        (向量搜索 + 质量评估 + 候选管理)               │  │
+│  └──────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 内存提供商对比
+### 特性
 
-| 特性 | Local | Hybrid | Remote |
-|------|-------|--------|--------|
-| 数据存储 | 本地 LanceDB | 本地 + 远程 | 远程 HTTP |
-| 网络依赖 | 无 | 可选降级 | 必须 |
-| 向量搜索 | ✅ 本地 | ✅ 本地优先 | ❌ 依赖服务 |
-| 同步支持 | ❌ | ✅ | N/A |
-| 适用场景 | 单机、离线 | 多设备同步 | 团队协作 |
+- **远程 HTTP 内存服务**：基于 HTTP API 的知识库存储和检索
+- **向量搜索**：语义相似度搜索，返回相关知识条目
+- **质量评估**：自动评估知识条目的质量和可信度
+- **记忆管理**：记录知识使用反馈，优化检索结果
+- **会话提取**：从执行历史中自动提取知识候选
 
 ### HTTP 服务器模式
 

@@ -1,3 +1,4 @@
+use memchr::memchr;
 use std::sync::Arc;
 
 use tokio::io::AsyncReadExt;
@@ -94,7 +95,7 @@ where
             total += n as u64;
 
             line_buf.extend_from_slice(&buf[..n]);
-            while let Some(pos) = line_buf.iter().position(|&b| b == b'\n') {
+            while let Some(pos) = memchr(b'\n', &line_buf) {
                 let mut one = line_buf.drain(..=pos).collect::<Vec<u8>>();
                 trim_newline(&mut one);
                 let line = String::from_utf8_lossy(&one).to_string();

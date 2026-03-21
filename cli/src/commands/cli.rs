@@ -34,17 +34,6 @@ impl From<memex_core::api::BackendKind> for BackendKind {
     }
 }
 
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskLevel {
-    #[default]
-    Auto,
-    L0,
-    L1,
-    L2,
-    L3,
-}
-
 #[derive(Parser, Debug, Clone)]
 #[command(version)]
 pub struct Args {
@@ -63,7 +52,8 @@ pub struct Args {
 #[derive(ClapArgs, Debug, Clone, Serialize, Deserialize)]
 pub struct RunArgs {
     #[arg(long)]
-    pub backend: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
 
     /// Explicitly select how to interpret `--backend`.
     /// - auto: URL => aiservice, otherwise => codecli
@@ -81,13 +71,6 @@ pub struct RunArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_provider: Option<String>,
 
-    /// Task level for scheduling/strategy hints.
-    /// - auto: infer from prompt (fast heuristic)
-    /// - L0..L3: explicitly set
-    #[arg(long, value_enum, default_value_t = TaskLevel::Auto)]
-    #[serde(default)]
-    pub task_level: TaskLevel,
-
     #[arg(long, group = "input")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
@@ -103,11 +86,6 @@ pub struct RunArgs {
     #[arg(long, default_value = "text")]
     #[serde(default = "default_stream_format")]
     pub stream_format: String,
-
-    /// Force TUI mode (does not affect `--stream-format`).
-    #[arg(long, default_value_t = false)]
-    #[serde(default)]
-    pub tui: bool,
 
     /// Extra environment variables to pass to the backend process (KEY=VALUE).
     /// Can be specified multiple times.
@@ -338,136 +316,6 @@ pub struct HttpServerArgs {
     pub session_id: Option<String>,
 }
 
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncStatusArgs {
-    /// Output format: json or markdown
-    #[arg(long, default_value = "markdown")]
-    pub format: String,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncNowArgs {
-    /// Wait for sync to complete before returning
-    #[arg(long, default_value_t = false)]
-    pub wait: bool,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncConflictsArgs {
-    /// Output format: json or markdown
-    #[arg(long, default_value = "markdown")]
-    pub format: String,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum SyncCommand {
-    /// Show current sync status
-    Status(SyncStatusArgs),
-    /// Trigger immediate synchronization
-    Now(SyncNowArgs),
-    /// List pending conflicts
-    Conflicts(SyncConflictsArgs),
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncArgs {
-    #[command(subcommand)]
-    pub command: SyncCommand,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbInitArgs {
-    /// Force reinitialize even if database exists
-    #[arg(long, default_value_t = false)]
-    pub force: bool,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbInfoArgs {
-    /// Output format: json or markdown
-    #[arg(long, default_value = "markdown")]
-    pub format: String,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbExportArgs {
-    /// Output file path (defaults to stdout)
-    #[arg(long)]
-    pub output: Option<String>,
-
-    /// Export format: jsonl or csv
-    #[arg(long, default_value = "jsonl")]
-    pub format: String,
-
-    /// Include validation records
-    #[arg(long, default_value_t = false)]
-    pub include_validations: bool,
-
-    /// Include hit records
-    #[arg(long, default_value_t = false)]
-    pub include_hits: bool,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbImportArgs {
-    /// Input file path (required)
-    #[arg(long)]
-    pub input: String,
-
-    /// Import format: jsonl or csv
-    #[arg(long, default_value = "jsonl")]
-    pub format: String,
-
-    /// Skip existing items (by ID)
-    #[arg(long, default_value_t = false)]
-    pub skip_existing: bool,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum DbCommand {
-    /// Initialize local database
-    Init(DbInitArgs),
-    /// Show database information
-    Info(DbInfoArgs),
-    /// Export database to file
-    Export(DbExportArgs),
-    /// Import data from file
-    Import(DbImportArgs),
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbArgs {
-    #[command(subcommand)]
-    pub command: DbCommand,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct InitArgs {
-    /// Memory provider type: local, hybrid, or service
-    #[arg(long, default_value = "local")]
-    pub provider: String,
-
-    /// Skip interactive prompts, use defaults
-    #[arg(long, default_value_t = false)]
-    pub non_interactive: bool,
-
-    /// Ollama base URL (for local embeddings)
-    #[arg(long, default_value = "http://localhost:11434")]
-    pub ollama_url: String,
-
-    /// OpenAI API key (for OpenAI embeddings)
-    #[arg(long)]
-    pub openai_key: Option<String>,
-
-    /// Remote memory service URL (for hybrid mode)
-    #[arg(long)]
-    pub remote_url: Option<String>,
-
-    /// Remote memory API key (for hybrid mode)
-    #[arg(long)]
-    pub remote_key: Option<String>,
-}
-
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
@@ -479,10 +327,4 @@ pub enum Commands {
     RecordValidation(RecordValidationArgs),
     RecordSession(RecordSessionArgs),
     HttpServer(HttpServerArgs),
-    /// Initialize memex configuration
-    Init(InitArgs),
-    /// Memory synchronization commands
-    Sync(SyncArgs),
-    /// Local database management
-    Db(DbArgs),
 }

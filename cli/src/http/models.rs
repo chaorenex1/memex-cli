@@ -236,9 +236,6 @@ pub struct RunRequest {
     pub project_id: Option<String>,
 
     #[serde(default)]
-    pub tui: bool,
-
-    #[serde(default)]
     pub structured_text: bool,
 
     #[serde(default)]

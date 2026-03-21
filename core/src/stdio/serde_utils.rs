@@ -121,6 +121,7 @@ mod tests {
             files_mode: super::super::FilesMode::Ref,
             files_encoding: super::super::FilesEncoding::Utf8,
             content: "hello".to_string(),
+            system_prompt: Some("you are a test assistant".to_string()),
             backend_kind: Some(crate::config::BackendKind::Codecli),
             env_file: Some(".env".to_string()),
             env: Some(vec!["A=B".to_string()]),
@@ -136,6 +137,7 @@ mod tests {
         assert_eq!(decoded.files_encoding, task.files_encoding);
         assert_eq!(decoded.backend_kind, task.backend_kind);
         assert_eq!(decoded.env, task.env);
+        assert_eq!(decoded.system_prompt, task.system_prompt);
     }
 
     #[test]
@@ -176,6 +178,7 @@ mod tests {
             files_mode: super::super::FilesMode::Auto,
             files_encoding: super::super::FilesEncoding::Auto,
             content: "hello".to_string(),
+            system_prompt: None,
             backend_kind: None,
             env_file: None,
             env: None,

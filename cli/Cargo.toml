@@ -1,6 +1,6 @@
 [package]
 name = "memex-cli"
-version = "1.3.2"
+version = "1.3.3"
 edition = "2021"
 authors = ["chaorenex1"]
 license = "Apache-2.0"
@@ -37,9 +37,6 @@ chrono = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }
 shellexpand = { workspace = true}
 
-# Optional TUI dependencies
-ratatui = { workspace = true}
-crossterm = { workspace = true}
 atty = { workspace = true}
 
 # HTTP client (for daemon)
