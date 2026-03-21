@@ -42,7 +42,7 @@ tracing-appender = { version = "^0.2" }
 axum = { version = "^0.7.9", features = ["http2"] }
 tower = { version = "^0.4" }
 tower-http = { version = "^0.5", features = ["cors", "trace", "timeout","util"] }
-reqwest = { version = "^0.12", features = ["http2", "rustls-tls", "stream"] }
+reqwest = { version = "^0.12", features = ["http2", "rustls-tls", "stream", "json"] }
 bytes = { version = "^1.5", features = ["std"] }
 async-stream = "^0.3"
 
@@ -72,13 +72,6 @@ encoding_rs = { version = "^0.8" }
 base64 = { version = "^0.22", features = ["std"] }
 glob = { version = "^0.3" }
 indicatif = { version = "^0.17" }
-
-# Optional LanceDB dependencies (for local-memory feature)
-lancedb = { version = "^0.23", default-features = false, features = ["polars"] }
-arrow = { version = "^56", default-features = false, features = ["ipc"] }
-arrow-array = { version = "^56"}
-arrow-schema = { version = "^56"}
-arrow-buffer = { version = "^56"}
 shellexpand = { version = "3.0"}
 stream = { version = "^0.1"}
 

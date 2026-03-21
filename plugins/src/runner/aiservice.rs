@@ -97,8 +97,7 @@ impl RunnerPlugin for AiServiceRunnerPlugin {
                 return Ok(());
             }
 
-            let body = resp.bytes().await;
-            let body = match body {
+            let body = match resp.bytes().await {
                 Ok(b) => b,
                 Err(e) => {
                     let _ = stderr_wr

@@ -316,109 +316,6 @@ pub struct HttpServerArgs {
     pub session_id: Option<String>,
 }
 
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncStatusArgs {
-    /// Output format: json or markdown
-    #[arg(long, default_value = "markdown")]
-    pub format: String,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncNowArgs {
-    /// Wait for sync to complete before returning
-    #[arg(long, default_value_t = false)]
-    pub wait: bool,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncConflictsArgs {
-    /// Output format: json or markdown
-    #[arg(long, default_value = "markdown")]
-    pub format: String,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum SyncCommand {
-    /// Show current sync status
-    Status(SyncStatusArgs),
-    /// Trigger immediate synchronization
-    Now(SyncNowArgs),
-    /// List pending conflicts
-    Conflicts(SyncConflictsArgs),
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct SyncArgs {
-    #[command(subcommand)]
-    pub command: SyncCommand,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbInitArgs {
-    /// Force reinitialize even if database exists
-    #[arg(long, default_value_t = false)]
-    pub force: bool,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbInfoArgs {
-    /// Output format: json or markdown
-    #[arg(long, default_value = "markdown")]
-    pub format: String,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbExportArgs {
-    /// Output file path (defaults to stdout)
-    #[arg(long)]
-    pub output: Option<String>,
-
-    /// Export format: jsonl or csv
-    #[arg(long, default_value = "jsonl")]
-    pub format: String,
-
-    /// Include validation records
-    #[arg(long, default_value_t = false)]
-    pub include_validations: bool,
-
-    /// Include hit records
-    #[arg(long, default_value_t = false)]
-    pub include_hits: bool,
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbImportArgs {
-    /// Input file path (required)
-    #[arg(long)]
-    pub input: String,
-
-    /// Import format: jsonl or csv
-    #[arg(long, default_value = "jsonl")]
-    pub format: String,
-
-    /// Skip existing items (by ID)
-    #[arg(long, default_value_t = false)]
-    pub skip_existing: bool,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum DbCommand {
-    /// Initialize local database
-    Init(DbInitArgs),
-    /// Show database information
-    Info(DbInfoArgs),
-    /// Export database to file
-    Export(DbExportArgs),
-    /// Import data from file
-    Import(DbImportArgs),
-}
-
-#[derive(ClapArgs, Debug, Clone)]
-pub struct DbArgs {
-    #[command(subcommand)]
-    pub command: DbCommand,
-}
-
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
     Run(RunArgs),
@@ -430,8 +327,4 @@ pub enum Commands {
     RecordValidation(RecordValidationArgs),
     RecordSession(RecordSessionArgs),
     HttpServer(HttpServerArgs),
-    /// Memory synchronization commands
-    Sync(SyncArgs),
-    /// Local database management
-    Db(DbArgs),
 }

@@ -186,14 +186,6 @@ async fn dispatch(cmd: cli::Commands, args: cli::Args, ctx: AppContext) -> Resul
             memex_cli::http::server::handle_http_server(http_args, &ctx).await?;
             Ok(0)
         }
-        cli::Commands::Sync(sync_args) => {
-            memex_cli::commands::sync::handle_sync(sync_args, &ctx).await?;
-            Ok(0)
-        }
-        cli::Commands::Db(db_args) => {
-            memex_cli::commands::db::handle_db(db_args, &ctx).await?;
-            Ok(0)
-        }
     }
 }
 

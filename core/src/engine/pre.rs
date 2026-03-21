@@ -33,12 +33,6 @@ pub async fn pre_run(
         crate::config::MemoryProvider::Service(svc_cfg) => {
             (svc_cfg.search_limit, svc_cfg.min_score)
         }
-        crate::config::MemoryProvider::Local(local_cfg) => {
-            (local_cfg.search_limit, local_cfg.min_score)
-        }
-        crate::config::MemoryProvider::Hybrid(hybrid_cfg) => {
-            (hybrid_cfg.local.search_limit, hybrid_cfg.local.min_score)
-        }
     };
 
     let inject_cfg: InjectConfig = InjectConfig {
