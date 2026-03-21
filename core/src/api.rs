@@ -5,9 +5,8 @@
 pub use crate::backend::{BackendPlan, BackendPlanRequest, BackendStrategy};
 pub use crate::config::{
     get_memex_data_dir, load_default, AppConfig, BackendKind, ConflictResolution, ControlConfig,
-    GatekeeperProvider, HttpServerConfig, LoggingConfig, MemoryProvider,
-    PolicyConfig, PolicyProvider, PolicyRule, PromptInjectPlacement, RunnerConfig,
-    TuiConfig,
+    GatekeeperProvider, HttpServerConfig, LoggingConfig, MemoryProvider, PolicyConfig,
+    PolicyProvider, PolicyRule, PromptInjectPlacement, RunnerConfig, TuiConfig,
 };
 pub use crate::context::{AppContext, Services, ServicesFactory};
 pub use crate::engine::{
