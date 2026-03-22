@@ -75,7 +75,11 @@ impl StructuredPromptBuilder {
         // Use user-provided scope if available
         if let Some(ref scope) = self.scope {
             if !scope.trim().is_empty() {
-                return format!("{}\n\nRelevant files:\n{}", scope.trim(), self.format_file_list(&files));
+                return format!(
+                    "{}\n\nRelevant files:\n{}",
+                    scope.trim(),
+                    self.format_file_list(&files)
+                );
             }
         }
 

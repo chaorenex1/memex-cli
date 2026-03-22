@@ -327,9 +327,16 @@ fn build_task_from_metadata_zero_copy(
 
     let model = metadata.get("model").map(|s| s.to_string());
     let model_provider = metadata.get("model-provider").map(|s| s.to_string());
-    let role_prompt =
-        get_metadata_value_zero_copy(&metadata, &["role_prompt", "role-prompt", "system_prompt", "system-prompt"])
-            .map(|s| s.to_string());
+    let role_prompt = get_metadata_value_zero_copy(
+        &metadata,
+        &[
+            "role_prompt",
+            "role-prompt",
+            "system_prompt",
+            "system-prompt",
+        ],
+    )
+    .map(|s| s.to_string());
 
     let timeout = parse_u64_zero_copy(metadata.get("timeout").copied(), "timeout")?;
     let retry = parse_u32_zero_copy(metadata.get("retry").copied(), "retry")?;

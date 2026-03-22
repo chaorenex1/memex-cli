@@ -7,8 +7,8 @@
 //! - 单任务支持 resume
 //! - 多任务不支持 resume (报错)
 
-mod types;
 mod mapper;
+mod types;
 
-pub use types::{BackendSession, ExecutionStatus, SessionState};
 pub use mapper::{ResumeCheck, SessionMapper};
+pub use types::{BackendSession, ExecutionStatus, SessionState};

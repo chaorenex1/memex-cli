@@ -125,7 +125,10 @@ impl SessionState {
 
     /// 获取所有 session_id
     pub fn all_session_ids(&self) -> Vec<&str> {
-        self.sessions.iter().map(|s| s.session_id.as_str()).collect()
+        self.sessions
+            .iter()
+            .map(|s| s.session_id.as_str())
+            .collect()
     }
 
     /// 获取所有 task_id

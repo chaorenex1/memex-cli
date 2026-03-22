@@ -249,14 +249,15 @@ impl SessionMapper {
 
         // 确保目录存在
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(|e| RunnerError::Io(format!("Failed to create session directory: {}", e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                RunnerError::Io(format!("Failed to create session directory: {}", e))
+            })?;
         }
 
         // 序列化并写入
-        let content = serde_json::to_string_pretty(state)
-            .map_err(|e| RunnerError::Serialization(format!("Failed to serialize session state: {}", e)))?;
+        let content = serde_json::to_string_pretty(state).map_err(|e| {
+            RunnerError::Serialization(format!("Failed to serialize session state: {}", e))
+        })?;
 
         fs::write(&path, content)
             .await
@@ -297,12 +298,7 @@ impl SessionMapper {
             .await
             .map_err(|e| RunnerError::Io(format!("Failed to read session entry: {}", e)))?
         {
-            if entry
-                .file_type()
-                .await
-                .map(|t| t.is_dir())
-                .unwrap_or(false)
-            {
+            if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
                 if let Some(run_id) = entry.file_name().to_str() {
                     if let Ok(Some(state)) = self.load(run_id).await {
                         sessions.push(state);
@@ -336,7 +332,13 @@ mod tests {
 
         // Create session
         mapper
-            .create("run-test-1", "/tmp/work", "gemini", Some("test prompt".into()), false)
+            .create(
+                "run-test-1",
+                "/tmp/work",
+                "gemini",
+                Some("test prompt".into()),
+                false,
+            )
             .await
             .unwrap();
 
@@ -474,7 +476,13 @@ mod tests {
         let mapper = SessionMapper::with_base_path(dir.path().to_path_buf());
 
         mapper
-            .create("run-resume", "/tmp/work", "gemini", Some("original prompt".into()), false)
+            .create(
+                "run-resume",
+                "/tmp/work",
+                "gemini",
+                Some("original prompt".into()),
+                false,
+            )
             .await
             .unwrap();
 

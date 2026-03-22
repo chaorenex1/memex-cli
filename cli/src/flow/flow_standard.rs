@@ -198,7 +198,16 @@ pub async fn run_standard_flow(
         client.exec_run(&tasks, &stdio_opts).await
     } else {
         // 本地模式：直接调用 Core
-        run_multi_tasks_with_mapper(&tasks, &stdio_opts, ctx, None, &session_mapper, &run_id, &backend_kind_str).await
+        run_multi_tasks_with_mapper(
+            &tasks,
+            &stdio_opts,
+            ctx,
+            None,
+            &session_mapper,
+            &run_id,
+            &backend_kind_str,
+        )
+        .await
     }?;
 
     // Update final session status
