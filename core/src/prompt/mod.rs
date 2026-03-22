@@ -2,7 +2,7 @@
 //!
 //! Builds a structured prompt from role prompt, content, and files
 
-use std::collections::HashMap;
+use std::collections::BTreeSet;
 
 /// Structured prompt builder
 pub struct StructuredPromptBuilder {
@@ -45,21 +45,22 @@ impl StructuredPromptBuilder {
     /// Build the structured prompt
     pub fn build(self) -> String {
         let mut sections = Vec::new();
+        let content = self.content.trim();
 
         // 1. Role setting (if provided)
         if let Some(ref role) = self.role_prompt {
             if !role.trim().is_empty() {
-                sections.push(format!("## Role\n\n{}", role.trim()));
+                sections.push(format!("<Role>\n{}\n</Role>", role.trim()));
             }
         }
 
         // 2. Task scope (files)
         if !self.files.is_empty() {
-            sections.push(format!("## Scope\n\n{}", self.format_scope()));
+            sections.push(format!("<Scope>\n{}\n</Scope>", self.format_scope()));
         }
 
         // 3. Task steps (main content)
-        sections.push(format!("## Steps\n\n{}", self.content));
+        sections.push(format!("<TaskSteps>\n{}\n</TaskSteps>", content));
 
         sections.join("\n\n")
     }
@@ -69,47 +70,40 @@ impl StructuredPromptBuilder {
             return "No specific scope".to_string();
         }
 
+        let files = self.unique_files();
+
         // Use user-provided scope if available
         if let Some(ref scope) = self.scope {
             if !scope.trim().is_empty() {
-                return scope.clone();
+                return format!("{}\n\nRelevant files:\n{}", scope.trim(), self.format_file_list(&files));
             }
         }
 
-        // Group files by directory
-        let mut dirs: HashMap<String, Vec<String>> = HashMap::new();
-        let mut standalone_files: Vec<String> = Vec::new();
+        self.format_file_list(&files)
+    }
 
-        for file in &self.files {
-            if let Some(pos) = file.rfind('/') {
-                let dir = &file[..pos];
-                dirs.entry(dir.to_string())
-                    .or_default()
-                    .push(file.clone());
-            } else {
-                standalone_files.push(file.clone());
-            }
+    fn unique_files(&self) -> Vec<String> {
+        let mut seen = BTreeSet::new();
+
+        self.files
+            .iter()
+            .map(|file| file.trim())
+            .filter(|file| !file.is_empty())
+            .filter(|file| seen.insert((*file).to_string()))
+            .map(ToOwned::to_owned)
+            .collect()
+    }
+
+    fn format_file_list(&self, files: &[String]) -> String {
+        if files.is_empty() {
+            return "No specific scope".to_string();
         }
 
-        let mut result = Vec::new();
-
-        // Add directories
-        let mut dir_keys: Vec<_> = dirs.keys().collect();
-        dir_keys.sort();
-        for dir in dir_keys {
-            result.push(format!("- `{}/`", dir));
-        }
-
-        // Add standalone files
-        for file in standalone_files {
-            result.push(format!("- `{}`", file));
-        }
-
-        if result.is_empty() {
-            "No specific scope".to_string()
-        } else {
-            result.join("\n")
-        }
+        files
+            .iter()
+            .map(|file| format!("- {}", file))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -131,9 +125,9 @@ mod tests {
             .files(vec!["./src/main.rs".to_string()])
             .build();
 
-        assert!(prompt.contains("## Role"));
-        assert!(prompt.contains("## Scope"));
-        assert!(prompt.contains("## Steps"));
+        assert!(prompt.contains("<Role>"));
+        assert!(prompt.contains("<Scope>"));
+        assert!(prompt.contains("<TaskSteps>"));
         assert!(prompt.contains("你是一个代码审查专家"));
         assert!(prompt.contains("./src/"));
         assert!(prompt.contains("请分析代码结构"));
@@ -145,9 +139,9 @@ mod tests {
             .content("简单任务".to_string())
             .build();
 
-        assert!(!prompt.contains("## Role"));
-        assert!(!prompt.contains("## Scope"));
-        assert!(prompt.contains("## Steps"));
+        assert!(!prompt.contains("<Role>"));
+        assert!(!prompt.contains("<Scope>"));
+        assert!(prompt.contains("<TaskSteps>"));
         assert!(prompt.contains("简单任务"));
     }
 
@@ -163,8 +157,11 @@ mod tests {
             .scope(Some("仅处理 Rust 文件".to_string()))
             .build();
 
-        assert!(prompt.contains("## Scope"));
+        assert!(prompt.contains("<Scope>"));
         assert!(prompt.contains("仅处理 Rust 文件"));
+        assert!(prompt.contains("Relevant files:"));
+        assert!(prompt.contains("./src/a.rs"));
+        assert!(prompt.contains("./tests/c.rs"));
     }
 
     #[test]
@@ -178,7 +175,18 @@ mod tests {
             ])
             .build();
 
-        assert!(prompt.contains("./src/"));
-        assert!(prompt.contains("./tests/"));
+        assert!(prompt.contains("./src/a.rs"));
+        assert!(prompt.contains("./src/b.rs"));
+        assert!(prompt.contains("./tests/c.rs"));
+    }
+
+    #[test]
+    fn test_structured_prompt_builder_deduplicates_files() {
+        let prompt = StructuredPromptBuilder::new()
+            .content("请只处理给定文件".to_string())
+            .files(vec!["./src/a.rs".to_string(), "./src/a.rs".to_string()])
+            .build();
+
+        assert_eq!(prompt.matches("./src/a.rs").count(), 1);
     }
 }

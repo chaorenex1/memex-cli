@@ -16,10 +16,11 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
             backend,
             mut base_envs,
             resume_id: _resume_id,
-            prompt,
+            prompt: raw_prompt,
             model,
             model_provider,
             role_prompt,
+            files,
             project_id,
             stream_format,
             task_level: _,
@@ -33,6 +34,12 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
             ));
         }
 
+        // Build structured prompt using StructuredPromptBuilder
+        let prompt = core_api::StructuredPromptBuilder::new()
+            .content(raw_prompt)
+            .files(files)
+            .build();
+
         // Use env vars to pass metadata without overloading RunnerStartArgs.
         if let Some(m) = &model {
             base_envs.insert("MEMEX_MODEL".to_string(), m.clone());
@@ -42,7 +49,7 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
                 base_envs.insert("MEMEX_ROLE_PROMPT".to_string(), rp.clone());
             }
         }
-        // Wrapper always streams output; the format is controlled separately via stream_format.
+        // Wrapper always streams output; the format is controlled separately via stream_format
         base_envs.insert("MEMEX_STREAM".to_string(), "1".to_string());
         base_envs.insert("MEMEX_STREAM_FORMAT".to_string(), stream_format);
 

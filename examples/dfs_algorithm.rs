@@ -1,22 +1,36 @@
 /// 深度优先搜索（DFS）算法示例
 ///
 /// 这个示例展示了 DFS 算法的多种实现方式和应用场景
-
 use std::collections::{HashMap, HashSet};
 
 /// 图的邻接表表示
 type Graph = HashMap<usize, Vec<usize>>;
+
+fn all_nodes(graph: &Graph) -> Vec<usize> {
+    let mut nodes: HashSet<usize> = graph.keys().copied().collect();
+    for neighbors in graph.values() {
+        nodes.extend(neighbors.iter().copied());
+    }
+
+    let mut nodes: Vec<_> = nodes.into_iter().collect();
+    nodes.sort_unstable();
+    nodes
+}
+
+fn sorted_neighbors(graph: &Graph, node: usize) -> Vec<usize> {
+    let mut neighbors = graph.get(&node).cloned().unwrap_or_default();
+    neighbors.sort_unstable();
+    neighbors
+}
 
 /// 1. 递归实现 DFS（最常见的方式）
 fn dfs_recursive(graph: &Graph, node: usize, visited: &mut HashSet<usize>, path: &mut Vec<usize>) {
     visited.insert(node);
     path.push(node);
 
-    if let Some(neighbors) = graph.get(&node) {
-        for &neighbor in neighbors {
-            if !visited.contains(&neighbor) {
-                dfs_recursive(graph, neighbor, visited, path);
-            }
+    for neighbor in sorted_neighbors(graph, node) {
+        if !visited.contains(&neighbor) {
+            dfs_recursive(graph, neighbor, visited, path);
         }
     }
 }
@@ -36,11 +50,10 @@ fn dfs_iterative(graph: &Graph, start: usize) -> Vec<usize> {
         path.push(node);
 
         // 将相邻节点压入栈（逆序以保持访问顺序）
-        if let Some(neighbors) = graph.get(&node) {
-            for &neighbor in neighbors.iter().rev() {
-                if !visited.contains(&neighbor) {
-                    stack.push(neighbor);
-                }
+        let neighbors = sorted_neighbors(graph, node);
+        for &neighbor in neighbors.iter().rev() {
+            if !visited.contains(&neighbor) {
+                stack.push(neighbor);
             }
         }
     }
@@ -67,12 +80,10 @@ fn find_path(graph: &Graph, start: usize, target: usize) -> Option<Vec<usize>> {
             return true;
         }
 
-        if let Some(neighbors) = graph.get(&current) {
-            for &neighbor in neighbors {
-                if !visited.contains(&neighbor) {
-                    if dfs_path(graph, neighbor, target, visited, path) {
-                        return true;
-                    }
+        for neighbor in sorted_neighbors(graph, current) {
+            if !visited.contains(&neighbor) {
+                if dfs_path(graph, neighbor, target, visited, path) {
+                    return true;
                 }
             }
         }
@@ -102,16 +113,14 @@ fn has_cycle(graph: &Graph) -> bool {
         visited.insert(node);
         rec_stack.insert(node);
 
-        if let Some(neighbors) = graph.get(&node) {
-            for &neighbor in neighbors {
-                if !visited.contains(&neighbor) {
-                    if dfs_cycle(graph, neighbor, visited, rec_stack) {
-                        return true;
-                    }
-                } else if rec_stack.contains(&neighbor) {
-                    // 发现环
+        for neighbor in sorted_neighbors(graph, node) {
+            if !visited.contains(&neighbor) {
+                if dfs_cycle(graph, neighbor, visited, rec_stack) {
                     return true;
                 }
+            } else if rec_stack.contains(&neighbor) {
+                // 发现环
+                return true;
             }
         }
 
@@ -120,11 +129,9 @@ fn has_cycle(graph: &Graph) -> bool {
     }
 
     // 检查所有未访问的节点（处理非连通图）
-    for &node in graph.keys() {
-        if !visited.contains(&node) {
-            if dfs_cycle(graph, node, &mut visited, &mut rec_stack) {
-                return true;
-            }
+    for node in all_nodes(graph) {
+        if !visited.contains(&node) && dfs_cycle(graph, node, &mut visited, &mut rec_stack) {
+            return true;
         }
     }
 
@@ -147,16 +154,14 @@ fn topological_sort(graph: &Graph) -> Option<Vec<usize>> {
         visited.insert(node);
         rec_stack.insert(node);
 
-        if let Some(neighbors) = graph.get(&node) {
-            for &neighbor in neighbors {
-                if !visited.contains(&neighbor) {
-                    if !dfs_topo(graph, neighbor, visited, rec_stack, result) {
-                        return false;
-                    }
-                } else if rec_stack.contains(&neighbor) {
-                    // 发现环，不能进行拓扑排序
+        for neighbor in sorted_neighbors(graph, node) {
+            if !visited.contains(&neighbor) {
+                if !dfs_topo(graph, neighbor, visited, rec_stack, result) {
                     return false;
                 }
+            } else if rec_stack.contains(&neighbor) {
+                // 发现环，不能进行拓扑排序
+                return false;
             }
         }
 
@@ -165,11 +170,11 @@ fn topological_sort(graph: &Graph) -> Option<Vec<usize>> {
         true
     }
 
-    for &node in graph.keys() {
-        if !visited.contains(&node) {
-            if !dfs_topo(graph, node, &mut visited, &mut rec_stack, &mut result) {
-                return None; // 图中有环
-            }
+    for node in all_nodes(graph) {
+        if !visited.contains(&node)
+            && !dfs_topo(graph, node, &mut visited, &mut rec_stack, &mut result)
+        {
+            return None; // 图中有环
         }
     }
 
@@ -182,7 +187,7 @@ fn find_connected_components(graph: &Graph) -> Vec<Vec<usize>> {
     let mut visited = HashSet::new();
     let mut components = Vec::new();
 
-    for &node in graph.keys() {
+    for node in all_nodes(graph) {
         if !visited.contains(&node) {
             let mut component = Vec::new();
             dfs_recursive(graph, node, &mut visited, &mut component);
@@ -194,7 +199,15 @@ fn find_connected_components(graph: &Graph) -> Vec<Vec<usize>> {
 }
 
 /// 7. 迷宫求解（网格图 DFS）
-fn solve_maze(maze: &Vec<Vec<i32>>, start: (usize, usize), end: (usize, usize)) -> Option<Vec<(usize, usize)>> {
+fn solve_maze(
+    maze: &Vec<Vec<i32>>,
+    start: (usize, usize),
+    end: (usize, usize),
+) -> Option<Vec<(usize, usize)>> {
+    if maze.is_empty() || maze[0].is_empty() {
+        return None;
+    }
+
     let rows = maze.len();
     let cols = maze[0].len();
     let mut visited = vec![vec![false; cols]; rows];
@@ -301,16 +314,16 @@ fn main() {
     // 5. 拓扑排序
     println!("5. 拓扑排序（课程依赖关系）:");
     let mut dag: Graph = HashMap::new();
-    // 课程依赖：5 -> 2 -> 3 -> 1, 4 -> 0 -> 1
-    dag.insert(5, vec![2, 0]);
-    dag.insert(4, vec![0, 1]);
-    dag.insert(2, vec![3]);
-    dag.insert(3, vec![1]);
-    dag.insert(1, vec![]);
-    dag.insert(0, vec![1]);
+    // 先修课 -> 后续课程，拓扑序可以直接解释成“从左到右的学习顺序”
+    dag.insert(0, vec![4, 5]);
+    dag.insert(1, vec![0, 3, 4]);
+    dag.insert(2, vec![5]);
+    dag.insert(3, vec![2]);
+    dag.insert(4, vec![]);
+    dag.insert(5, vec![]);
 
     if let Some(order) = topological_sort(&dag) {
-        println!("   拓扑排序结果: {:?}", order);
+        println!("   一个合法的学习顺序: {:?}", order);
         println!("   （学习顺序：从左到右）\n");
     }
 
@@ -362,4 +375,83 @@ fn main() {
     }
 
     println!("\n=== DFS 算法示例完成 ===");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_graph() -> Graph {
+        HashMap::from([
+            (0, vec![1, 2]),
+            (1, vec![3, 4]),
+            (2, vec![5]),
+            (3, vec![]),
+            (4, vec![]),
+            (5, vec![]),
+        ])
+    }
+
+    #[test]
+    fn recursive_and_iterative_dfs_match() {
+        let graph = sample_graph();
+        let mut visited = HashSet::new();
+        let mut recursive_path = Vec::new();
+
+        dfs_recursive(&graph, 0, &mut visited, &mut recursive_path);
+
+        assert_eq!(recursive_path, vec![0, 1, 3, 4, 2, 5]);
+        assert_eq!(dfs_iterative(&graph, 0), recursive_path);
+    }
+
+    #[test]
+    fn path_search_returns_expected_route() {
+        let graph = sample_graph();
+        assert_eq!(find_path(&graph, 0, 5), Some(vec![0, 2, 5]));
+        assert_eq!(find_path(&graph, 4, 5), None);
+    }
+
+    #[test]
+    fn cycle_detection_and_topological_sort_work() {
+        let dag = HashMap::from([
+            (0, vec![4, 5]),
+            (1, vec![0, 3, 4]),
+            (2, vec![5]),
+            (3, vec![2]),
+            (4, vec![]),
+            (5, vec![]),
+        ]);
+        let cyclic = HashMap::from([(0, vec![1]), (1, vec![2]), (2, vec![0])]);
+
+        assert!(!has_cycle(&dag));
+        assert!(has_cycle(&cyclic));
+
+        let order = topological_sort(&dag).expect("DAG should have a topological order");
+        let positions: HashMap<usize, usize> = order
+            .iter()
+            .enumerate()
+            .map(|(idx, &node)| (node, idx))
+            .collect();
+
+        for (node, neighbors) in &dag {
+            for &neighbor in neighbors {
+                assert!(positions[node] < positions[&neighbor]);
+            }
+        }
+    }
+
+    #[test]
+    fn maze_solver_finds_a_valid_path() {
+        let maze = vec![
+            vec![0, 0, 0, 0, 0],
+            vec![1, 1, 0, 1, 0],
+            vec![0, 0, 0, 0, 0],
+            vec![0, 1, 1, 1, 0],
+            vec![0, 0, 0, 0, 0],
+        ];
+
+        let path = solve_maze(&maze, (0, 0), (4, 4)).expect("Maze should be solvable");
+        assert_eq!(path.first().copied(), Some((0, 0)));
+        assert_eq!(path.last().copied(), Some((4, 4)));
+    }
 }

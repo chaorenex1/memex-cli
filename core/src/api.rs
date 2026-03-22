@@ -58,4 +58,6 @@ pub use crate::tool_event::{
 
 pub use crate::session_mapper::{BackendSession, ExecutionStatus, ResumeCheck, SessionMapper, SessionState};
 
+pub use crate::prompt::StructuredPromptBuilder;
+
 pub use crate::util::generate_project_id;

@@ -33,6 +33,7 @@ pub async fn execute_stdio_tasks(
                 model: task.model.clone(),
                 model_provider: task.model_provider.clone(),
                 role_prompt: task.role_prompt.clone(),
+                files: task.files.clone(),
                 project_id: Some(task.workdir.clone()),
                 task_level: task.task_level.clone(),
             },

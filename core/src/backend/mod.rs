@@ -20,6 +20,8 @@ pub struct BackendPlanRequest {
     pub model_provider: Option<String>,
     /// 角色设定 (原 system_prompt)
     pub role_prompt: Option<String>,
+    /// 任务范围文件列表
+    pub files: Vec<String>,
     pub project_id: Option<String>,
     pub stream_format: String,
     pub task_level: Option<String>,

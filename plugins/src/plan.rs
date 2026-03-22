@@ -15,6 +15,8 @@ pub enum PlanMode {
         model_provider: Option<String>,
         /// 角色设定 (原 system_prompt)
         role_prompt: Option<String>,
+        /// 任务范围文件列表
+        files: Vec<String>,
         project_id: Option<String>,
         task_level: Option<String>,
     },
@@ -46,6 +48,7 @@ pub fn build_runner_spec(
             model,
             model_provider,
             role_prompt,
+            files,
             project_id,
             task_level,
         } => {
@@ -88,6 +91,7 @@ pub fn build_runner_spec(
                 stream_format: req.stream_format,
                 model_provider,
                 role_prompt,
+                files,
                 project_id,
                 task_level,
             },))

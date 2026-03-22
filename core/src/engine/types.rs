@@ -29,6 +29,8 @@ pub enum RunnerSpec {
         model_provider: Option<String>,
         /// 角色设定 (原 system_prompt)
         role_prompt: Option<String>,
+        /// 任务范围文件列表
+        files: Vec<String>,
         project_id: Option<String>,
         stream_format: String,
         task_level: Option<String>,

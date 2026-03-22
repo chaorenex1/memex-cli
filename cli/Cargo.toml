@@ -61,5 +61,9 @@ windows = { workspace = true }
 # Windows resource compiler for embedding icon and version info
 winres = { workspace = true }
 
+[[example]]
+name = "fibonacci"
+path = "../examples/fibonacci.rs"
+
 [lints]
 workspace = true
