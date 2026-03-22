@@ -42,4 +42,7 @@ pub struct TaskResult {
 
     /// Number of retries used
     pub retries_used: u32,
+
+    /// Backend session_id (if different from CLI run_id)
+    pub backend_session_id: Option<String>,
 }

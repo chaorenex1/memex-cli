@@ -503,6 +503,7 @@ impl<'a> ExecutionEngine<'a> {
                         None
                     },
                     retries_used,
+                    backend_session_id: None, // Will be populated by session mapper integration
                 })
             }
         };
@@ -758,6 +759,7 @@ fn emit_task_complete(
                 output: String::new(),
                 error: None,
                 retries_used,
+                backend_session_id: None,
             },
         });
     } else {
