@@ -56,4 +56,6 @@ pub use crate::tool_event::{
     ToolEventLite, ToolEventRuntime, WrapperEvent, TOOL_EVENT_PREFIX,
 };
 
+pub use crate::session_mapper::{BackendSession, ExecutionStatus, ResumeCheck, SessionMapper, SessionState};
+
 pub use crate::util::generate_project_id;

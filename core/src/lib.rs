@@ -11,6 +11,7 @@ mod input;
 pub mod memory;
 mod replay;
 mod runner;
+pub mod session_mapper;
 pub mod stdio;
 pub mod tool_event;
 mod util;

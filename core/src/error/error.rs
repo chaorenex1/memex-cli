@@ -31,4 +31,12 @@ pub enum RunnerError {
     Plugin(#[from] anyhow::Error),
     #[error("stdio execution error: {0}")]
     Stdio(String),
+    #[error("session not found: {0}")]
+    SessionNotFound(String),
+    #[error("session state error: {0}")]
+    SessionState(String),
+    #[error("io error: {0}")]
+    Io(String),
+    #[error("serialization error: {0}")]
+    Serialization(String),
 }

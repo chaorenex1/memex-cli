@@ -26,8 +26,11 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 
 # Time & UUID
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4"] }
+
+# Home directory
+dirs = { workspace = true }
 
 # Performance optimized search
 memchr = {workspace = true}

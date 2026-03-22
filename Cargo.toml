@@ -61,7 +61,7 @@ num_cpus = { version = "^1.16" }
 windows = { version = "0.58", features = ["Win32_System_Threading"] }
 
 # Time & UUID (minimal features)
-chrono = { version = "^0.4", features = ["clock", "std"] }
+chrono = { version = "^0.4", features = ["clock", "std", "serde"] }
 uuid = { version = "^1.8", features = ["std"] }
 memchr={version = "2.7"}
 # Text & regex
