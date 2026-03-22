@@ -3,6 +3,7 @@ use crate::commands::cli::{Args, RunArgs};
 use crate::http::client::RemoteClient;
 use crate::stdio::{execute_stdio_tasks, read_stdin_text};
 use memex_core::api as core_api;
+use memex_core::session_mapper::{ExecutionStatus, ResumeCheck, SessionMapper};
 use tokio::sync::mpsc;
 
 pub async fn run_standard_flow(
@@ -15,11 +16,48 @@ pub async fn run_standard_flow(
     // Step 1: Read raw input from all sources
     let raw_input = read_raw_input(run_args)?;
 
-    // Step 2: Parse input into tasks (structured or plain text mode)
-
-    let run_id = recover_run_id
-        .clone()
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    // Step 2: Handle resume with SessionMapper
+    let session_mapper = SessionMapper::new();
+    let (run_id, backend_resume_id) = if let Some(ref recover_id) = recover_run_id {
+        // Check if we can resume
+        match session_mapper.check_resume(recover_id).await {
+            Ok(ResumeCheck::CanResume {
+                session_id,
+                workdir: _,
+                backend_kind: _,
+                original_prompt: _,
+            }) => {
+                tracing::info!(
+                    "Resuming session: run_id={}, backend_session_id={:?}",
+                    recover_id,
+                    session_id
+                );
+                // Use the backend session_id for actual resume
+                (recover_id.clone(), session_id)
+            }
+            Ok(ResumeCheck::NotFound) => {
+                tracing::warn!("Session not found: {}, creating new session", recover_id);
+                (recover_id.clone(), None)
+            }
+            Ok(ResumeCheck::MultiTaskNotSupported) => {
+                return Err(core_api::RunnerError::Stdio(
+                    "Cannot resume multi-task session. Multi-task execution does not support resume.".to_string()
+                ));
+            }
+            Ok(ResumeCheck::NotInterrupted { status }) => {
+                return Err(core_api::RunnerError::Stdio(
+                    format!("Session is not in interrupted state (current status: {:?}). Only interrupted sessions can be resumed.", status)
+                ));
+            }
+            Err(e) => {
+                tracing::warn!("Failed to check resume status: {}, creating new session", e);
+                (recover_id.clone(), None)
+            }
+        }
+    } else {
+        // New execution - generate new run_id
+        (uuid::Uuid::new_v4().to_string(), None)
+    };
 
     let project_id =
         if let Some(project_id) = run_args.as_ref().and_then(|ra| ra.project_id.clone()) {
@@ -48,8 +86,9 @@ pub async fn run_standard_flow(
     let env = run_args.as_ref().map(|ra| ra.env.clone());
 
     let mut tasks: Vec<core_api::StdioTask> = parse_input_to_tasks(&raw_input, run_args)?;
-    // Step 3: Route based on task count
-    // let user_query = tasks[0].content.clone();
+
+    // Determine effective resume_run_id (prefer backend session_id for actual resume)
+    let effective_resume_id = backend_resume_id.clone().or(recover_run_id.clone());
 
     if tasks.is_empty() {
         tasks.push(core_api::StdioTask {
@@ -73,7 +112,7 @@ pub async fn run_standard_flow(
             env_file,
             env,
             task_level: None,
-            resume_run_id: recover_run_id.clone(),
+            resume_run_id: effective_resume_id.clone(),
             resume_context: Some(raw_input.clone()),
         });
     } else {
@@ -98,30 +137,58 @@ pub async fn run_standard_flow(
                 task.env = env.clone();
             }
             if task.resume_run_id.is_none() {
-                task.resume_run_id = recover_run_id.clone();
+                task.resume_run_id = effective_resume_id.clone();
             }
             if task.resume_context.is_none() {
                 task.resume_context = Some(raw_input.clone());
             }
         }
     }
-    // Multiple tasks: use run_stdio
+
+    // Create session state for new executions
+    let is_multi_task = tasks.len() > 1;
+    let backend_kind_str = tasks
+        .first()
+        .and_then(|t| t.backend_kind.map(|k| k.to_string()))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if recover_run_id.is_none() {
+        // New execution - create session state
+        let _ = session_mapper
+            .create(
+                &run_id,
+                &project_id,
+                &backend_kind_str,
+                Some(raw_input.clone()),
+                is_multi_task,
+            )
+            .await;
+    } else {
+        // Resume - update status to Resumed
+        let _ = session_mapper
+            .update_status(&run_id, ExecutionStatus::Resumed, None)
+            .await;
+    }
+
+    // Execute tasks
     tracing::info!(
         "Executing {} tasks... on project_id={} mode={}",
         tasks.len(),
         &project_id,
         if *is_remote { "remote" } else { "local" }
     );
+
     let stdio_opts: core_api::StdioRunOpts = core_api::StdioRunOpts {
         stream_format: stream_format.clone(),
         capture_bytes: args.capture_bytes,
         quiet: false,
         verbose: true,
         ascii: false,
-        resume_run_id: recover_run_id.clone(),
+        resume_run_id: effective_resume_id.clone(),
         resume_context: Some(raw_input.clone()),
     };
-    if *is_remote {
+
+    let exit_code = if *is_remote {
         let server_url = format!(
             "http://{}:{}",
             ctx.cfg().http_server.host,
@@ -131,8 +198,20 @@ pub async fn run_standard_flow(
         client.exec_run(&tasks, &stdio_opts).await
     } else {
         // 本地模式：直接调用 Core
-        run_multi_tasks(&tasks, &stdio_opts, ctx, None).await
-    }
+        run_multi_tasks_with_mapper(&tasks, &stdio_opts, ctx, None, &session_mapper, &run_id, &backend_kind_str).await
+    }?;
+
+    // Update final session status
+    let final_status = if exit_code == 0 {
+        ExecutionStatus::Completed
+    } else {
+        ExecutionStatus::Failed
+    };
+    let _ = session_mapper
+        .update_status(&run_id, final_status, Some(exit_code))
+        .await;
+
+    Ok(exit_code)
 }
 
 /// Reads raw input from all possible sources (--prompt, --prompt-file, --stdin, args)
@@ -182,6 +261,55 @@ pub async fn run_multi_tasks(
     let result = execute_stdio_tasks(tasks, ctx, stdio_opts, http_sse_tx)
         .await
         .map_err(|e| core_api::RunnerError::Stdio(e.to_string()))?;
+
+    // Convert ExecutionResult to exit code
+    if result.failed > 0 {
+        tracing::error!(
+            "❌ Execution failed: {}/{} tasks failed",
+            result.failed,
+            result.total_tasks
+        );
+        Ok(1)
+    } else {
+        tracing::info!(
+            "✅ Execution successful: {} tasks completed in {}ms",
+            result.completed,
+            result.duration_ms
+        );
+        Ok(0)
+    }
+}
+
+/// Executes multiple tasks with session mapping support
+pub async fn run_multi_tasks_with_mapper(
+    tasks: &Vec<core_api::StdioTask>,
+    stdio_opts: &core_api::StdioRunOpts,
+    ctx: &core_api::AppContext,
+    http_sse_tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
+    session_mapper: &SessionMapper,
+    run_id: &str,
+    backend_kind: &str,
+) -> Result<i32, core_api::RunnerError> {
+    let result = execute_stdio_tasks(tasks, ctx, stdio_opts, http_sse_tx)
+        .await
+        .map_err(|e| core_api::RunnerError::Stdio(e.to_string()))?;
+
+    // Register backend session mappings for each task
+    for (task_id, task_result) in &result.task_results {
+        if let Some(ref backend_session_id) = task_result.backend_session_id {
+            // Register the mapping: CLI run_id -> backend session_id
+            if let Err(e) = session_mapper
+                .register_session(run_id, backend_session_id, task_id, backend_kind)
+                .await
+            {
+                tracing::warn!(
+                    "Failed to register session mapping for task {}: {}",
+                    task_id,
+                    e
+                );
+            }
+        }
+    }
 
     // Convert ExecutionResult to exit code
     if result.failed > 0 {
