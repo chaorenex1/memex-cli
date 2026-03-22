@@ -19,7 +19,7 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
             prompt,
             model,
             model_provider,
-            system_prompt,
+            role_prompt,
             project_id,
             stream_format,
             task_level: _,
@@ -37,9 +37,9 @@ impl core_api::BackendStrategy for AiServiceBackendStrategy {
         if let Some(m) = &model {
             base_envs.insert("MEMEX_MODEL".to_string(), m.clone());
         }
-        if let Some(sp) = &system_prompt {
-            if !sp.trim().is_empty() {
-                base_envs.insert("MEMEX_SYSTEM_PROMPT".to_string(), sp.clone());
+        if let Some(rp) = &role_prompt {
+            if !rp.trim().is_empty() {
+                base_envs.insert("MEMEX_ROLE_PROMPT".to_string(), rp.clone());
             }
         }
         // Wrapper always streams output; the format is controlled separately via stream_format.

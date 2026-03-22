@@ -31,8 +31,10 @@ pub struct StdioTask {
     pub files_mode: FilesMode,
     pub files_encoding: FilesEncoding,
     pub content: String,
-    #[serde(alias = "system-prompt")]
-    pub system_prompt: Option<String>,
+    /// 角色设定 (原 system_prompt)
+    /// 定义 AI 的角色、职责和能力边界
+    #[serde(alias = "role-prompt", alias = "system-prompt")]
+    pub role_prompt: Option<String>,
     pub backend_kind: Option<crate::config::BackendKind>,
     pub env_file: Option<String>,
     pub env: Option<Vec<String>>,
@@ -73,7 +75,7 @@ impl StdioTask {
                 }
                 .to_string(),
             ),
-            system_prompt: self.system_prompt.clone(),
+            role_prompt: self.role_prompt.clone(),
             tags: Vec::new(),
         };
 

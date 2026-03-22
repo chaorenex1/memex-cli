@@ -171,8 +171,10 @@ pub fn parse_stdio_tasks_internal(input: &str) -> Result<Vec<StdioTask>, StdioEr
             .unwrap_or_else(|| "text".to_string());
         let model = metadata.get("model").cloned();
         let model_provider = metadata.get("model-provider").cloned();
-        let system_prompt = metadata
-            .get("system_prompt")
+        let role_prompt = metadata
+            .get("role_prompt")
+            .or_else(|| metadata.get("role-prompt"))
+            .or_else(|| metadata.get("system_prompt"))
             .or_else(|| metadata.get("system-prompt"))
             .cloned();
         let timeout = parse_u64(metadata.get("timeout").map(String::as_str), "timeout")?;
@@ -200,7 +202,7 @@ pub fn parse_stdio_tasks_internal(input: &str) -> Result<Vec<StdioTask>, StdioEr
             files_mode,
             files_encoding,
             content,
-            system_prompt,
+            role_prompt,
             backend_kind: None,
             env_file: None,
             env: None,
@@ -325,8 +327,8 @@ fn build_task_from_metadata_zero_copy(
 
     let model = metadata.get("model").map(|s| s.to_string());
     let model_provider = metadata.get("model-provider").map(|s| s.to_string());
-    let system_prompt =
-        get_metadata_value_zero_copy(&metadata, &["system_prompt", "system-prompt"])
+    let role_prompt =
+        get_metadata_value_zero_copy(&metadata, &["role_prompt", "role-prompt", "system_prompt", "system-prompt"])
             .map(|s| s.to_string());
 
     let timeout = parse_u64_zero_copy(metadata.get("timeout").copied(), "timeout")?;
@@ -356,7 +358,7 @@ fn build_task_from_metadata_zero_copy(
         files_mode,
         files_encoding,
         content: content.to_string(),
-        system_prompt,
+        role_prompt,
         backend_kind: None,
         env_file: None,
         env: None,
@@ -671,7 +673,43 @@ b
     }
 
     #[test]
-    fn parse_supports_system_prompt_with_underscore() {
+    fn parse_supports_role_prompt_with_underscore() {
+        let input = r#"
+---TASK---
+id: t1
+backend: codex
+workdir: .
+role_prompt: you are a strict reviewer
+---CONTENT---
+review this file
+---END---
+"#;
+        let tasks = parse_stdio_tasks_internal(input).unwrap();
+        assert_eq!(
+            tasks[0].role_prompt.as_deref(),
+            Some("you are a strict reviewer")
+        );
+    }
+
+    #[test]
+    fn parse_supports_role_prompt_with_hyphen() {
+        let input = r#"
+---TASK---
+id: t1
+backend: codex
+workdir: .
+role-prompt: be concise
+---CONTENT---
+summarize changes
+---END---
+"#;
+        let tasks = parse_stdio_tasks_internal(input).unwrap();
+        assert_eq!(tasks[0].role_prompt.as_deref(), Some("be concise"));
+    }
+
+    #[test]
+    fn parse_supports_system_prompt_alias() {
+        // Test backward compatibility with system_prompt alias
         let input = r#"
 ---TASK---
 id: t1
@@ -684,13 +722,14 @@ review this file
 "#;
         let tasks = parse_stdio_tasks_internal(input).unwrap();
         assert_eq!(
-            tasks[0].system_prompt.as_deref(),
+            tasks[0].role_prompt.as_deref(),
             Some("you are a strict reviewer")
         );
     }
 
     #[test]
-    fn parse_supports_system_prompt_with_hyphen() {
+    fn parse_supports_system_prompt_hyphen_alias() {
+        // Test backward compatibility with system-prompt alias
         let input = r#"
 ---TASK---
 id: t1
@@ -702,7 +741,7 @@ summarize changes
 ---END---
 "#;
         let tasks = parse_stdio_tasks_internal(input).unwrap();
-        assert_eq!(tasks[0].system_prompt.as_deref(), Some("be concise"));
+        assert_eq!(tasks[0].role_prompt.as_deref(), Some("be concise"));
     }
 
     #[test]

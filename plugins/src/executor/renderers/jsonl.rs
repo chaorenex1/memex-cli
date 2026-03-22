@@ -187,6 +187,7 @@ mod tests {
                 output: "ok".to_string(),
                 error: None,
                 retries_used: 1,
+                backend_session_id: None,
             },
         };
 

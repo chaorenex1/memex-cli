@@ -27,7 +27,8 @@ pub enum RunnerSpec {
         resume_id: Option<String>,
         model: Option<String>,
         model_provider: Option<String>,
-        system_prompt: Option<String>,
+        /// 角色设定 (原 system_prompt)
+        role_prompt: Option<String>,
         project_id: Option<String>,
         stream_format: String,
         task_level: Option<String>,

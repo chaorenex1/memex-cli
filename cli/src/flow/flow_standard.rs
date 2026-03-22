@@ -107,7 +107,7 @@ pub async fn run_standard_flow(
             files: vec![],
             files_encoding: core_api::FilesEncoding::Utf8,
             files_mode: core_api::FilesMode::Ref,
-            system_prompt: None,
+            role_prompt: None,
             backend_kind,
             env_file,
             env,

@@ -130,6 +130,7 @@ mod tests {
                 output: "oops".to_string(),
                 error: None,
                 retries_used: 2,
+                backend_session_id: None,
             },
         };
 

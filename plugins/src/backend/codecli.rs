@@ -22,13 +22,13 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
             prompt: raw_prompt,
             model,
             model_provider,
-            system_prompt,
+            role_prompt,
             project_id,
             stream_format,
             task_level: _,
         } = request;
 
-        let prompt = merge_system_prompt(system_prompt.as_deref(), &raw_prompt);
+        let prompt = merge_role_prompt(role_prompt.as_deref(), &raw_prompt);
 
         // 提取命令类型用于判断参数格式（codex/claude/gemini）
         let cmd_type = extract_command_type(&backend);
@@ -218,16 +218,17 @@ impl core_api::BackendStrategy for CodeCliBackendStrategy {
     }
 }
 
-fn merge_system_prompt(system_prompt: Option<&str>, user_prompt: &str) -> String {
-    let Some(system_prompt) = system_prompt.map(str::trim).filter(|s| !s.is_empty()) else {
+/// 合并角色设定与用户提示词
+fn merge_role_prompt(role_prompt: Option<&str>, user_prompt: &str) -> String {
+    let Some(role_prompt) = role_prompt.map(str::trim).filter(|s| !s.is_empty()) else {
         return user_prompt.to_string();
     };
 
     if user_prompt.trim().is_empty() {
-        return format!("System instructions:\n{system_prompt}");
+        return format!("## 角色设定\n\n{}", role_prompt);
     }
 
-    format!("System instructions:\n{system_prompt}\n\nUser prompt:\n{user_prompt}")
+    format!("## 角色设定\n\n{}\n\n## 任务\n\n{}", role_prompt, user_prompt)
 }
 
 /// 解析可执行文件的完整路径

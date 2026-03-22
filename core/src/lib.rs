@@ -9,6 +9,7 @@ pub mod executor;
 mod gatekeeper;
 mod input;
 pub mod memory;
+pub mod prompt;
 mod replay;
 mod runner;
 pub mod session_mapper;

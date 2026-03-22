@@ -13,7 +13,8 @@ pub enum PlanMode {
         env: Vec<String>,
         model: Option<String>,
         model_provider: Option<String>,
-        system_prompt: Option<String>,
+        /// 角色设定 (原 system_prompt)
+        role_prompt: Option<String>,
         project_id: Option<String>,
         task_level: Option<String>,
     },
@@ -44,7 +45,7 @@ pub fn build_runner_spec(
             env,
             model,
             model_provider,
-            system_prompt,
+            role_prompt,
             project_id,
             task_level,
         } => {
@@ -86,7 +87,7 @@ pub fn build_runner_spec(
                 model,
                 stream_format: req.stream_format,
                 model_provider,
-                system_prompt,
+                role_prompt,
                 project_id,
                 task_level,
             },))
