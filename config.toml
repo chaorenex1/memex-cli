@@ -114,7 +114,7 @@ allowlist = [
 [memory]
 # Memory provider: "service" (remote HTTP API)
 provider = "service"
-enabled = true
+enabled = false
 
 # ===== Service Provider (Remote HTTP API) =====
 base_url = "https://memory.internal"

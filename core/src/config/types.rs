@@ -605,7 +605,7 @@ impl Default for CandidateExtractConfig {
 }
 
 fn default_memory_enabled() -> bool {
-    true
+    false
 }
 
 fn default_memory_url() -> String {
